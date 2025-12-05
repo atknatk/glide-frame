@@ -1,36 +1,103 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GlideFrame
 
-## Getting Started
+YouTube mini player benzeri draggable ve resizable floating container. Next.js 16 için React library.
 
-First, run the development server:
+## Özellikler
+
+- 🖱️ **Draggable** - Header'dan tutarak sürüklenebilir
+- 📐 **Resizable** - Kenarlardan ve köşelerden boyutlandırılabilir
+- 📱 **Mobile First** - Touch support ve responsive tasarım
+- 🎯 **Multi-Instance** - Birden fazla frame açılabilir, tıklanan üste gelir
+- 💾 **localStorage** - Pozisyon ve boyut otomatik kaydedilir
+- ✨ **Glassmorphism** - Modern blur backdrop styling
+- 🌙 **Dark Mode** - shadcn/ui theme desteği
+
+## Kurulum
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm add react-rnd lucide-react
+pnpm dlx shadcn@latest init
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Kullanım
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```tsx
+import { GlideFrame } from "@/components/glide-frame";
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+function App() {
+  return (
+    <GlideFrame
+      id="unique-id"
+      title="Frame Title"
+      defaultPosition={{ x: 100, y: 100 }}
+      defaultSize={{ width: 800, height: 600 }}
+      onClose={() => console.log("Closed")}
+    >
+      {/* iframe veya React component */}
+      <iframe src="https://example.com" className="w-full h-full" />
+    </GlideFrame>
+  );
+}
+```
 
-## Learn More
+## Props
 
-To learn more about Next.js, take a look at the following resources:
+| Prop | Tip | Default | Açıklama |
+|------|-----|---------|----------|
+| `id` | `string` | - | Unique identifier (zorunlu) |
+| `title` | `string` | - | Header'da gösterilen başlık |
+| `defaultPosition` | `{ x, y }` | Sağ üst köşe | Başlangıç pozisyonu |
+| `defaultSize` | `{ width, height }` | 800x600 | Başlangıç boyutu |
+| `minSize` | `{ width, height }` | 400x300 | Minimum boyut |
+| `maxSize` | `{ width, height }` | Ekran - 40px | Maximum boyut |
+| `onClose` | `() => void` | - | Kapanış callback |
+| `onStateChange` | `(state) => void` | - | State değişim callback |
+| `persist` | `boolean` | `true` | localStorage'a kaydet |
+| `className` | `string` | - | Ek CSS class |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Kontroller
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **Minimize**: Container 300x60 boyutuna küçülür, sağ alt köşeye gider
+- **Maximize**: Full-screen olur (20px padding), drag disable
+- **Close**: Fade-out animasyonu ile kapanır
+- **Restore**: Önceki boyut ve pozisyona döner
+- **Double-click Header**: Maximize/Restore toggle
 
-## Deploy on Vercel
+## Component Yapısı
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```text
+/components/glide-frame
+├── GlideFrame.tsx       # Ana component
+├── GlideFrameHeader.tsx # Header + butonlar
+├── types.ts             # TypeScript tipleri
+├── index.ts             # Exports
+└── hooks/
+    └── useGlideFrame.ts # State management hook
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Teknik Stack
+
+- Next.js 16
+- React 19
+- TypeScript
+- react-rnd
+- shadcn/ui
+- Tailwind CSS 4
+- lucide-react
+
+## Geliştirme
+
+```bash
+# Bağımlılıkları yükle
+pnpm install
+
+# Development server
+pnpm dev
+
+# Build
+pnpm build
+```
+
+## Lisans
+
+MIT
