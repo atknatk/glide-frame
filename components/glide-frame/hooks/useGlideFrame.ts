@@ -35,32 +35,33 @@ export function useGlideFrame(options: UseGlideFrameOptions): UseGlideFrameRetur
 
   // Calculate initial values based on screen size
   const getInitialState = useCallback((): GlideFrameState => {
-    // Try to load from localStorage
+    // Calculate default position and size first
+    const isMobile = typeof window !== "undefined" && window.innerWidth < MOBILE_BREAKPOINT;
+    const defaultSizeValue = defaultSize || (isMobile ? MOBILE_DEFAULT_SIZE : DEFAULT_SIZE);
+
+    // Default position: top-right corner
+    const defaultPositionValue = defaultPosition || {
+      x: typeof window !== "undefined" ? window.innerWidth - defaultSizeValue.width - 20 : DEFAULT_POSITION.x,
+      y: 20,
+    };
+
+    // Try to load position and size from localStorage (not minimize/maximize state)
+    let position = defaultPositionValue;
+    let size = defaultSizeValue;
+
     if (persist && typeof window !== "undefined") {
       try {
         const saved = localStorage.getItem(storageKey);
         if (saved) {
           const parsed = JSON.parse(saved);
-          return {
-            ...parsed,
-            isVisible: true,
-            zIndex: ++globalZIndex,
-          };
+          // Only restore position and size, not minimize/maximize state
+          if (parsed.position) position = parsed.position;
+          if (parsed.size) size = parsed.size;
         }
       } catch (e) {
         console.warn("Failed to load GlideFrame state from localStorage:", e);
       }
     }
-
-    // Calculate default position and size
-    const isMobile = typeof window !== "undefined" && window.innerWidth < MOBILE_BREAKPOINT;
-    const size = defaultSize || (isMobile ? MOBILE_DEFAULT_SIZE : DEFAULT_SIZE);
-    
-    // Default position: top-right corner
-    const position = defaultPosition || {
-      x: typeof window !== "undefined" ? window.innerWidth - size.width - 20 : DEFAULT_POSITION.x,
-      y: 20,
-    };
 
     return {
       isMinimized: false,
@@ -84,19 +85,20 @@ export function useGlideFrame(options: UseGlideFrameOptions): UseGlideFrameRetur
     }
   }, [getInitialState]);
 
-  // Save to localStorage on state change
+  // Save to localStorage on state change (only position and size when not minimized/maximized)
   useEffect(() => {
     if (persist && typeof window !== "undefined" && isInitialized.current) {
-      try {
-        const toSave = {
-          position: state.position,
-          size: state.size,
-          isMinimized: state.isMinimized,
-          isMaximized: state.isMaximized,
-        };
-        localStorage.setItem(storageKey, JSON.stringify(toSave));
-      } catch (e) {
-        console.warn("Failed to save GlideFrame state to localStorage:", e);
+      // Only save when in normal state (not minimized or maximized)
+      if (!state.isMinimized && !state.isMaximized) {
+        try {
+          const toSave = {
+            position: state.position,
+            size: state.size,
+          };
+          localStorage.setItem(storageKey, JSON.stringify(toSave));
+        } catch (e) {
+          console.warn("Failed to save GlideFrame state to localStorage:", e);
+        }
       }
     }
     onStateChange?.(state);
