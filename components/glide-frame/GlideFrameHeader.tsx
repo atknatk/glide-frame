@@ -1,20 +1,21 @@
 "use client";
 
 import { useCallback, useRef } from "react";
-import { Minimize2, Maximize2, X, RotateCcw } from "lucide-react";
+import { Maximize2, X, RotateCcw, PanelLeftClose, PanelRightClose } from "lucide-react";
 import { GlideFrameHeaderProps } from "./types";
 import { cn } from "@/lib/utils";
 
 export function GlideFrameHeader({
   title,
-  isMinimized,
+  isDocked,
   isMaximized,
-  onMinimize,
+  onDockLeft,
+  onDockRight,
   onMaximize,
   onRestore,
   onClose,
 }: GlideFrameHeaderProps) {
-  const showRestore = isMinimized || isMaximized;
+  const showRestore = isDocked || isMaximized;
   const lastTapRef = useRef<number>(0);
 
   // Double tap to maximize/restore on mobile
@@ -23,20 +24,20 @@ export function GlideFrameHeader({
     const DOUBLE_TAP_DELAY = 300;
 
     if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
-      if (isMaximized || isMinimized) {
+      if (isMaximized || isDocked) {
         onRestore();
       } else {
         onMaximize();
       }
     }
     lastTapRef.current = now;
-  }, [isMaximized, isMinimized, onMaximize, onRestore]);
+  }, [isMaximized, isDocked, onMaximize, onRestore]);
 
   return (
     <div
       onTouchEnd={handleDoubleTap}
       onDoubleClick={() => {
-        if (isMaximized || isMinimized) {
+        if (isMaximized || isDocked) {
           onRestore();
         } else {
           onMaximize();
@@ -47,7 +48,7 @@ export function GlideFrameHeader({
         "bg-background/80 backdrop-blur-sm",
         "border-b border-border/50",
         "select-none touch-manipulation",
-        !isMaximized && "cursor-grab active:cursor-grabbing"
+        !isMaximized && !isDocked && "cursor-grab active:cursor-grabbing"
       )}
     >
       {/* Title */}
@@ -59,7 +60,7 @@ export function GlideFrameHeader({
 
       {/* Control Buttons */}
       <div className="flex items-center gap-1">
-        {/* Restore Button - shown when minimized or maximized */}
+        {/* Restore Button - shown when docked or maximized */}
         {showRestore && (
           <button
             onClick={(e) => {
@@ -80,12 +81,12 @@ export function GlideFrameHeader({
           </button>
         )}
 
-        {/* Minimize Button - hidden when already minimized */}
-        {!isMinimized && (
+        {/* Dock Left Button - hidden when docked */}
+        {!isDocked && !isMaximized && (
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onMinimize();
+              onDockLeft();
             }}
             className={cn(
               "p-1.5 rounded-md",
@@ -94,15 +95,36 @@ export function GlideFrameHeader({
               "transition-colors duration-150",
               "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
             )}
-            aria-label="Minimize"
-            title="Minimize"
+            aria-label="Dock Left"
+            title="Dock Left"
           >
-            <Minimize2 className="h-4 w-4" />
+            <PanelLeftClose className="h-4 w-4" />
           </button>
         )}
 
-        {/* Maximize Button - hidden when already maximized */}
-        {!isMaximized && !isMinimized && (
+        {/* Dock Right Button - hidden when docked */}
+        {!isDocked && !isMaximized && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDockRight();
+            }}
+            className={cn(
+              "p-1.5 rounded-md",
+              "text-muted-foreground hover:text-foreground",
+              "hover:bg-accent",
+              "transition-colors duration-150",
+              "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
+            )}
+            aria-label="Dock Right"
+            title="Dock Right"
+          >
+            <PanelRightClose className="h-4 w-4" />
+          </button>
+        )}
+
+        {/* Maximize Button - hidden when maximized or docked */}
+        {!isMaximized && !isDocked && (
           <button
             onClick={(e) => {
               e.stopPropagation();

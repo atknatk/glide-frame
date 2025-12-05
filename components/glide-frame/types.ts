@@ -12,10 +12,15 @@ export interface Size {
   height: number;
 }
 
+// Dock side type
+export type DockSide = "left" | "right" | null;
+
 // GlideFrame state
 export interface GlideFrameState {
   isMinimized: boolean;
   isMaximized: boolean;
+  isDocked: boolean;
+  dockedSide: DockSide;
   isVisible: boolean;
   position: Position;
   size: Size;
@@ -54,9 +59,10 @@ export interface GlideFrameProps {
 // GlideFrame header props
 export interface GlideFrameHeaderProps {
   title: string;
-  isMinimized: boolean;
+  isDocked: boolean;
   isMaximized: boolean;
-  onMinimize: () => void;
+  onDockLeft: () => void;
+  onDockRight: () => void;
   onMaximize: () => void;
   onRestore: () => void;
   onClose: () => void;
@@ -65,7 +71,6 @@ export interface GlideFrameHeaderProps {
 // Default values
 export const DEFAULT_SIZE: Size = { width: 800, height: 600 };
 export const DEFAULT_MIN_SIZE: Size = { width: 400, height: 300 };
-export const DEFAULT_MINIMIZED_SIZE: Size = { width: 300, height: 60 };
 export const DEFAULT_POSITION: Position = { x: 100, y: 100 };
 
 // Mobile breakpoint
@@ -75,8 +80,12 @@ export const MOBILE_BREAKPOINT = 768;
 export const MOBILE_DEFAULT_SIZE: Size = { width: 320, height: 400 };
 export const MOBILE_MIN_SIZE: Size = { width: 280, height: 200 };
 
+// Docked (minimized) state
+export const DOCKED_HANDLE_WIDTH = 24; // Width of visible handle when docked
+export const DOCKED_HEIGHT = 120; // Height of docked frame
+
 // Animation duration in ms
-export const ANIMATION_DURATION = 150;
+export const ANIMATION_DURATION = 200;
 
 // LocalStorage key prefix
 export const STORAGE_KEY_PREFIX = "glide_frame_";
@@ -91,7 +100,9 @@ export const MAXIMIZE_PADDING = 20;
 export interface UseGlideFrameReturn {
   state: GlideFrameState;
   actions: {
-    minimize: () => void;
+    dockLeft: () => void;
+    dockRight: () => void;
+    undock: () => void;
     maximize: () => void;
     restore: () => void;
     close: () => void;

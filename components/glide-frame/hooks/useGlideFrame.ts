@@ -8,12 +8,13 @@ import {
   UseGlideFrameReturn,
   DEFAULT_SIZE,
   DEFAULT_POSITION,
-  DEFAULT_MINIMIZED_SIZE,
   STORAGE_KEY_PREFIX,
   BASE_Z_INDEX,
   MAXIMIZE_PADDING,
   MOBILE_BREAKPOINT,
   MOBILE_DEFAULT_SIZE,
+  DOCKED_HANDLE_WIDTH,
+  DOCKED_HEIGHT,
 } from "../types";
 
 // Global z-index counter
@@ -29,7 +30,7 @@ interface UseGlideFrameOptions {
 
 export function useGlideFrame(options: UseGlideFrameOptions): UseGlideFrameReturn {
   const { id, defaultPosition, defaultSize, persist = true, onStateChange } = options;
-  
+
   const storageKey = `${STORAGE_KEY_PREFIX}${id}`;
   const isInitialized = useRef(false);
 
@@ -66,6 +67,8 @@ export function useGlideFrame(options: UseGlideFrameOptions): UseGlideFrameRetur
     return {
       isMinimized: false,
       isMaximized: false,
+      isDocked: false,
+      dockedSide: null,
       isVisible: true,
       position,
       size,
@@ -85,11 +88,11 @@ export function useGlideFrame(options: UseGlideFrameOptions): UseGlideFrameRetur
     }
   }, [getInitialState]);
 
-  // Save to localStorage on state change (only position and size when not minimized/maximized)
+  // Save to localStorage on state change (only position and size when not docked/maximized)
   useEffect(() => {
     if (persist && typeof window !== "undefined" && isInitialized.current) {
-      // Only save when in normal state (not minimized or maximized)
-      if (!state.isMinimized && !state.isMaximized) {
+      // Only save when in normal state (not docked or maximized)
+      if (!state.isDocked && !state.isMaximized) {
         try {
           const toSave = {
             position: state.position,
@@ -113,25 +116,69 @@ export function useGlideFrame(options: UseGlideFrameOptions): UseGlideFrameRetur
     };
   }, [persist, storageKey]);
 
-  // Actions
-  const minimize = useCallback(() => {
+  // Actions - Dock to left edge (iOS style minimize)
+  const dockLeft = useCallback(() => {
     setState((prev) => {
-      if (prev.isMinimized) return prev;
+      if (prev.isDocked && prev.dockedSide === "left") return prev;
+
+      const windowHeight = typeof window !== "undefined" ? window.innerHeight : 1080;
+
+      return {
+        ...prev,
+        isDocked: true,
+        dockedSide: "left",
+        isMinimized: true,
+        isMaximized: false,
+        previousPosition: prev.isDocked ? prev.previousPosition : prev.position,
+        previousSize: prev.isDocked ? prev.previousSize : prev.size,
+        position: {
+          x: -prev.size.width + DOCKED_HANDLE_WIDTH,
+          y: (windowHeight - DOCKED_HEIGHT) / 2,
+        },
+        zIndex: ++globalZIndex,
+      };
+    });
+  }, []);
+
+  // Dock to right edge
+  const dockRight = useCallback(() => {
+    setState((prev) => {
+      if (prev.isDocked && prev.dockedSide === "right") return prev;
 
       const windowWidth = typeof window !== "undefined" ? window.innerWidth : 1920;
       const windowHeight = typeof window !== "undefined" ? window.innerHeight : 1080;
 
       return {
         ...prev,
+        isDocked: true,
+        dockedSide: "right",
         isMinimized: true,
         isMaximized: false,
-        previousPosition: prev.previousPosition || prev.position,
-        previousSize: prev.previousSize || prev.size,
+        previousPosition: prev.isDocked ? prev.previousPosition : prev.position,
+        previousSize: prev.isDocked ? prev.previousSize : prev.size,
         position: {
-          x: windowWidth - DEFAULT_MINIMIZED_SIZE.width - 20,
-          y: windowHeight - DEFAULT_MINIMIZED_SIZE.height - 20,
+          x: windowWidth - DOCKED_HANDLE_WIDTH,
+          y: (windowHeight - DOCKED_HEIGHT) / 2,
         },
-        size: DEFAULT_MINIMIZED_SIZE,
+        zIndex: ++globalZIndex,
+      };
+    });
+  }, []);
+
+  // Undock (restore from docked state)
+  const undock = useCallback(() => {
+    setState((prev) => {
+      if (!prev.isDocked) return prev;
+
+      return {
+        ...prev,
+        isDocked: false,
+        dockedSide: null,
+        isMinimized: false,
+        position: prev.previousPosition || prev.position,
+        size: prev.previousSize || prev.size,
+        previousPosition: null,
+        previousSize: null,
         zIndex: ++globalZIndex,
       };
     });
@@ -148,6 +195,8 @@ export function useGlideFrame(options: UseGlideFrameOptions): UseGlideFrameRetur
         ...prev,
         isMaximized: true,
         isMinimized: false,
+        isDocked: false,
+        dockedSide: null,
         previousPosition: prev.previousPosition || prev.position,
         previousSize: prev.previousSize || prev.size,
         position: { x: MAXIMIZE_PADDING, y: MAXIMIZE_PADDING },
@@ -165,6 +214,8 @@ export function useGlideFrame(options: UseGlideFrameOptions): UseGlideFrameRetur
       ...prev,
       isMinimized: false,
       isMaximized: false,
+      isDocked: false,
+      dockedSide: null,
       position: prev.previousPosition || prev.position,
       size: prev.previousSize || prev.size,
       previousPosition: null,
@@ -202,15 +253,17 @@ export function useGlideFrame(options: UseGlideFrameOptions): UseGlideFrameRetur
   }, []);
 
   // Computed values
-  const canDrag = !state.isMaximized;
-  const canResize = !state.isMinimized && !state.isMaximized;
+  const canDrag = !state.isMaximized && !state.isDocked;
+  const canResize = !state.isMinimized && !state.isMaximized && !state.isDocked;
   const currentSize = state.size;
   const currentPosition = state.position;
 
   return {
     state,
     actions: {
-      minimize,
+      dockLeft,
+      dockRight,
+      undock,
       maximize,
       restore,
       close,
