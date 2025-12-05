@@ -95,6 +95,7 @@ export const ANIMATION_DURATION = 200;
 export const MOMENTUM_FRICTION = 0.92; // Friction factor (0-1, higher = less friction)
 export const MOMENTUM_MIN_VELOCITY = 0.5; // Stop animation when velocity drops below this
 export const MOMENTUM_MULTIPLIER = 8; // Velocity multiplier for more noticeable effect
+export const DOCK_MIN_VELOCITY = 5; // Minimum velocity required to dock when hitting edge
 
 // LocalStorage key prefix
 export const STORAGE_KEY_PREFIX = "glide_frame_";
