@@ -127,15 +127,16 @@ export function GlideFrame({
       }
       newY = Math.max(0, Math.min(newY, windowHeight - frameHeight));
 
-      // Only dock if velocity is high enough (strong throw)
-      const horizontalSpeed = Math.abs(velocity.vx);
+      // Dock if frame hits edge with enough speed (any direction)
+      // This feels more natural - throwing hard in any direction while at edge = dock
+      const totalSpeed = Math.sqrt(velocity.vx * velocity.vx + velocity.vy * velocity.vy);
 
-      if (hitLeftEdge && horizontalSpeed >= DOCK_MIN_VELOCITY) {
+      if (hitLeftEdge && totalSpeed >= DOCK_MIN_VELOCITY) {
         actionsRef.current.dockLeft(newY);
         setIsMomentumActive(false);
         return;
       }
-      if (hitRightEdge && horizontalSpeed >= DOCK_MIN_VELOCITY) {
+      if (hitRightEdge && totalSpeed >= DOCK_MIN_VELOCITY) {
         actionsRef.current.dockRight(newY);
         setIsMomentumActive(false);
         return;
@@ -172,11 +173,15 @@ export function GlideFrame({
 
     if (lastPositionRef.current && lastTimeRef.current) {
       const dt = now - lastTimeRef.current;
-      if (dt > 0) {
-        velocityRef.current = {
-          vx: ((currentPos.x - lastPositionRef.current.x) / dt) * MOMENTUM_MULTIPLIER,
-          vy: ((currentPos.y - lastPositionRef.current.y) / dt) * MOMENTUM_MULTIPLIER,
-        };
+      if (dt > 0 && dt < 100) { // Ignore if too much time passed
+        const vx = ((currentPos.x - lastPositionRef.current.x) / dt) * MOMENTUM_MULTIPLIER;
+        const vy = ((currentPos.y - lastPositionRef.current.y) / dt) * MOMENTUM_MULTIPLIER;
+
+        // Only update velocity if there's actual movement
+        // This prevents the last "stationary" event from zeroing out velocity
+        if (Math.abs(vx) > 0.1 || Math.abs(vy) > 0.1) {
+          velocityRef.current = { vx, vy };
+        }
       }
     }
 
@@ -195,23 +200,14 @@ export function GlideFrame({
 
     // Check if we should apply momentum (velocity threshold)
     const speed = Math.sqrt(velocity.vx * velocity.vx + velocity.vy * velocity.vy);
-    const horizontalSpeed = Math.abs(velocity.vx);
 
-    if (speed > 2) {
+    if (speed > 1) {
       // Start momentum animation
       setIsMomentumActive(true);
       animateMomentumRef.current?.(finalPosition, { ...velocity });
     } else {
-      // No momentum - only dock if horizontal velocity is high enough
-      if (horizontalSpeed >= DOCK_MIN_VELOCITY) {
-        const didDock = actionsRef.current.checkAndDock(finalPosition);
-        if (!didDock) {
-          actionsRef.current.updatePosition(finalPosition);
-        }
-      } else {
-        // Just update position, don't dock
-        actionsRef.current.updatePosition(finalPosition);
-      }
+      // Just update position
+      actionsRef.current.updatePosition(finalPosition);
     }
 
     // Reset velocity
