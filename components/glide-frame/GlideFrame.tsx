@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Rnd } from "react-rnd";
 import { GlideFrameHeader } from "./GlideFrameHeader";
 import { useGlideFrame } from "./hooks/useGlideFrame";
@@ -12,6 +12,27 @@ import {
   MOBILE_BREAKPOINT,
 } from "./types";
 import { cn } from "@/lib/utils";
+
+// Hook for checking if we're on the client side
+function useIsClient() {
+  return useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
+}
+
+// Hook for checking window width
+function useIsMobile() {
+  return useSyncExternalStore(
+    (callback) => {
+      window.addEventListener("resize", callback);
+      return () => window.removeEventListener("resize", callback);
+    },
+    () => window.innerWidth < MOBILE_BREAKPOINT,
+    () => false
+  );
+}
 
 export function GlideFrame({
   id,
@@ -27,8 +48,8 @@ export function GlideFrame({
   persist = true,
 }: GlideFrameProps) {
   const [isClosing, setIsClosing] = useState(false);
-  const [isMounted, setIsMounted] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const isMounted = useIsClient();
+  const isMobile = useIsMobile();
 
   const { state, actions, computed } = useGlideFrame({
     id,
@@ -37,19 +58,6 @@ export function GlideFrame({
     persist,
     onStateChange,
   });
-
-  // Handle client-side mounting
-  useEffect(() => {
-    setIsMounted(true);
-    setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
-
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
-    };
-
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
 
   // Handle close with animation
   const handleClose = () => {
@@ -105,6 +113,7 @@ export function GlideFrame({
         actions.updatePosition(position);
       }}
       onMouseDown={() => actions.bringToFront()}
+      onTouchStart={() => actions.bringToFront()}
       style={{
         zIndex: state.zIndex,
         transition: isClosing
@@ -113,6 +122,9 @@ export function GlideFrame({
           ? `all ${ANIMATION_DURATION}ms ease-out`
           : undefined,
         opacity: isClosing ? 0 : 1,
+        // Enable hardware acceleration
+        transform: "translateZ(0)",
+        willChange: "transform",
       }}
       className={cn(
         "fixed",
@@ -121,6 +133,8 @@ export function GlideFrame({
         "border border-border/50",
         "bg-background/95 backdrop-blur-xl",
         "dark:bg-background/90",
+        // Touch-friendly on mobile
+        isMobile && "touch-manipulation",
         className
       )}
     >

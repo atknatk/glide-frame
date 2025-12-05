@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useRef } from "react";
 import { Minimize2, Maximize2, X, RotateCcw } from "lucide-react";
 import { GlideFrameHeaderProps } from "./types";
 import { cn } from "@/lib/utils";
@@ -14,14 +15,38 @@ export function GlideFrameHeader({
   onClose,
 }: GlideFrameHeaderProps) {
   const showRestore = isMinimized || isMaximized;
+  const lastTapRef = useRef<number>(0);
+
+  // Double tap to maximize/restore on mobile
+  const handleDoubleTap = useCallback(() => {
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300;
+
+    if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
+      if (isMaximized || isMinimized) {
+        onRestore();
+      } else {
+        onMaximize();
+      }
+    }
+    lastTapRef.current = now;
+  }, [isMaximized, isMinimized, onMaximize, onRestore]);
 
   return (
     <div
+      onTouchEnd={handleDoubleTap}
+      onDoubleClick={() => {
+        if (isMaximized || isMinimized) {
+          onRestore();
+        } else {
+          onMaximize();
+        }
+      }}
       className={cn(
         "flex items-center justify-between px-3 py-2",
         "bg-background/80 backdrop-blur-sm",
         "border-b border-border/50",
-        "select-none",
+        "select-none touch-manipulation",
         !isMaximized && "cursor-grab active:cursor-grabbing"
       )}
     >
