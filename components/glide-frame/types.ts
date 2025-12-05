@@ -91,6 +91,11 @@ export const DOCK_EDGE_THRESHOLD = 5; // px - only dock when frame hits the edge
 // Animation duration in ms
 export const ANIMATION_DURATION = 200;
 
+// Momentum/Inertia settings
+export const MOMENTUM_FRICTION = 0.92; // Friction factor (0-1, higher = less friction)
+export const MOMENTUM_MIN_VELOCITY = 0.5; // Stop animation when velocity drops below this
+export const MOMENTUM_MULTIPLIER = 8; // Velocity multiplier for more noticeable effect
+
 // LocalStorage key prefix
 export const STORAGE_KEY_PREFIX = "glide_frame_";
 

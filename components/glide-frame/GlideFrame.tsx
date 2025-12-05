@@ -1,18 +1,22 @@
 "use client";
 
-import { useState, useSyncExternalStore, useCallback } from "react";
+import { useState, useSyncExternalStore, useCallback, useRef, useEffect } from "react";
 import { Rnd } from "react-rnd";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { GlideFrameHeader } from "./GlideFrameHeader";
 import { useGlideFrame } from "./hooks/useGlideFrame";
 import {
   GlideFrameProps,
+  Position,
   DEFAULT_MIN_SIZE,
   ANIMATION_DURATION,
   MOBILE_MIN_SIZE,
   MOBILE_BREAKPOINT,
   DOCKED_HANDLE_WIDTH,
   DOCKED_HEIGHT,
+  MOMENTUM_FRICTION,
+  MOMENTUM_MIN_VELOCITY,
+  MOMENTUM_MULTIPLIER,
 } from "./types";
 import { cn } from "@/lib/utils";
 
@@ -51,8 +55,15 @@ export function GlideFrame({
   persist = true,
 }: GlideFrameProps) {
   const [isClosing, setIsClosing] = useState(false);
+  const [isMomentumActive, setIsMomentumActive] = useState(false);
   const isMounted = useIsClient();
   const isMobile = useIsMobile();
+
+  // Momentum tracking refs
+  const lastPositionRef = useRef<Position | null>(null);
+  const lastTimeRef = useRef<number>(0);
+  const velocityRef = useRef<{ vx: number; vy: number }>({ vx: 0, vy: 0 });
+  const animationFrameRef = useRef<number | null>(null);
 
   const { state, actions, computed } = useGlideFrame({
     id,
@@ -75,6 +86,123 @@ export function GlideFrame({
   const handleDockHandleClick = useCallback(() => {
     actions.undock();
   }, [actions]);
+
+  // Store latest state/actions in refs for animation callback
+  const stateRef = useRef(state);
+  const actionsRef = useRef(actions);
+
+  // Update refs in useEffect to avoid "cannot access ref during render" warnings
+  useEffect(() => {
+    stateRef.current = state;
+    actionsRef.current = actions;
+  });
+
+  // Momentum animation ref for recursive calls
+  const animateMomentumRef = useRef<((pos: Position, vel: { vx: number; vy: number }) => void) | null>(null);
+
+  // Set up the momentum animation function in useEffect
+  useEffect(() => {
+    animateMomentumRef.current = (currentPos: Position, velocity: { vx: number; vy: number }) => {
+      const windowWidth = typeof window !== "undefined" ? window.innerWidth : 1920;
+      const windowHeight = typeof window !== "undefined" ? window.innerHeight : 1080;
+      const frameWidth = stateRef.current.size.width;
+      const frameHeight = stateRef.current.size.height;
+
+      // Apply velocity
+      let newX = currentPos.x + velocity.vx;
+      let newY = currentPos.y + velocity.vy;
+
+      // Clamp to bounds
+      newX = Math.max(0, Math.min(newX, windowWidth - frameWidth));
+      newY = Math.max(0, Math.min(newY, windowHeight - frameHeight));
+
+      // Check if hit edge - dock if so
+      if (newX <= 5) {
+        actionsRef.current.dockLeft(newY);
+        setIsMomentumActive(false);
+        return;
+      }
+      if (newX + frameWidth >= windowWidth - 5) {
+        actionsRef.current.dockRight(newY);
+        setIsMomentumActive(false);
+        return;
+      }
+
+      // Update position
+      actionsRef.current.updatePosition({ x: newX, y: newY });
+
+      // Apply friction
+      velocity.vx *= MOMENTUM_FRICTION;
+      velocity.vy *= MOMENTUM_FRICTION;
+
+      // Continue animation if velocity is significant
+      if (Math.abs(velocity.vx) > MOMENTUM_MIN_VELOCITY || Math.abs(velocity.vy) > MOMENTUM_MIN_VELOCITY) {
+        animationFrameRef.current = requestAnimationFrame(() => {
+          animateMomentumRef.current?.({ x: newX, y: newY }, velocity);
+        });
+      } else {
+        setIsMomentumActive(false);
+      }
+    };
+  });
+
+  // Handle drag for velocity tracking
+  const handleDrag = useCallback((_e: unknown, d: { x: number; y: number }) => {
+    const now = performance.now();
+    const currentPos = { x: d.x, y: d.y };
+
+    if (lastPositionRef.current && lastTimeRef.current) {
+      const dt = now - lastTimeRef.current;
+      if (dt > 0) {
+        velocityRef.current = {
+          vx: ((currentPos.x - lastPositionRef.current.x) / dt) * MOMENTUM_MULTIPLIER,
+          vy: ((currentPos.y - lastPositionRef.current.y) / dt) * MOMENTUM_MULTIPLIER,
+        };
+      }
+    }
+
+    lastPositionRef.current = currentPos;
+    lastTimeRef.current = now;
+  }, []);
+
+  // Handle drag stop with momentum
+  const handleDragStop = useCallback((_e: unknown, d: { x: number; y: number }) => {
+    const finalPosition = { x: d.x, y: d.y };
+    const velocity = velocityRef.current;
+
+    // Reset tracking
+    lastPositionRef.current = null;
+    lastTimeRef.current = 0;
+
+    // Check if we should apply momentum (velocity threshold)
+    const speed = Math.sqrt(velocity.vx * velocity.vx + velocity.vy * velocity.vy);
+
+    if (speed > 2) {
+      // Start momentum animation
+      setIsMomentumActive(true);
+      animateMomentumRef.current?.(finalPosition, { ...velocity });
+    } else {
+      // No momentum - check for dock or just update position
+      const didDock = actionsRef.current.checkAndDock(finalPosition);
+      if (!didDock) {
+        actionsRef.current.updatePosition(finalPosition);
+      }
+    }
+
+    // Reset velocity
+    velocityRef.current = { vx: 0, vy: 0 };
+  }, []);
+
+  // Handle drag start - cancel momentum and bring to front
+  const handleDragStart = useCallback(() => {
+    // Cancel any ongoing momentum animation
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    setIsMomentumActive(false);
+    actionsRef.current.bringToFront();
+  }, []);
 
   // Don't render on server or if not visible
   if (!isMounted || !state.isVisible) {
@@ -153,15 +281,9 @@ export function GlideFrame({
         bottomLeft: true,
         topLeft: true,
       } : false}
-      onDragStart={() => actions.bringToFront()}
-      onDragStop={(_e, d) => {
-        const newPosition = { x: d.x, y: d.y };
-        // Check if dragged to edge - if so, dock instead of just updating position
-        const didDock = actions.checkAndDock(newPosition);
-        if (!didDock) {
-          actions.updatePosition(newPosition);
-        }
-      }}
+      onDragStart={handleDragStart}
+      onDrag={handleDrag}
+      onDragStop={handleDragStop}
       onResizeStart={() => actions.bringToFront()}
       onResizeStop={(_e, _direction, ref, _delta, position) => {
         actions.updateSize({
@@ -174,15 +296,18 @@ export function GlideFrame({
       onTouchStart={() => actions.bringToFront()}
       style={{
         zIndex: state.zIndex,
-        transition: isClosing
-          ? `opacity ${ANIMATION_DURATION}ms ease-out`
-          : state.isMaximized
-          ? `all ${ANIMATION_DURATION}ms ease-out`
-          : undefined,
+        // Disable transition during momentum for smooth animation
+        transition: isMomentumActive
+          ? "none"
+          : isClosing
+            ? `opacity ${ANIMATION_DURATION}ms ease-out`
+            : state.isMaximized
+              ? `all ${ANIMATION_DURATION}ms ease-out`
+              : undefined,
         opacity: isClosing ? 0 : 1,
         // Enable hardware acceleration
         transform: "translateZ(0)",
-        willChange: "transform",
+        willChange: isMomentumActive ? "transform, left, top" : "transform",
       }}
       className={cn(
         "fixed",
