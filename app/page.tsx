@@ -1,65 +1,168 @@
-import Image from "next/image";
+"use client";
+
+import { useState } from "react";
+import { GlideFrame } from "@/components/glide-frame";
+import { Play, Video, Gamepad2, Layout } from "lucide-react";
+
+// Demo component to show inside GlideFrame
+function DemoContent({ title, color }: { title: string; color: string }) {
+  return (
+    <div
+      className={`h-full w-full flex flex-col items-center justify-center gap-4 ${color}`}
+    >
+      <h2 className="text-2xl font-bold text-white">{title}</h2>
+      <p className="text-white/80 text-center px-4">
+        This is a draggable and resizable container.
+        <br />
+        Try moving it around!
+      </p>
+    </div>
+  );
+}
+
+interface FrameConfig {
+  id: string;
+  title: string;
+  type: "iframe" | "video" | "component" | "game";
+}
 
 export default function Home() {
+  const [frames, setFrames] = useState<FrameConfig[]>([]);
+
+  const addFrame = (type: FrameConfig["type"]) => {
+    const id = `frame-${Date.now()}`;
+    const titles: Record<FrameConfig["type"], string> = {
+      iframe: "Web Content",
+      video: "Video Player",
+      component: "React Component",
+      game: "Slot Game",
+    };
+    setFrames((prev) => [...prev, { id, title: titles[type], type }]);
+  };
+
+  const removeFrame = (id: string) => {
+    setFrames((prev) => prev.filter((f) => f.id !== id));
+  };
+
+  const renderFrameContent = (frame: FrameConfig) => {
+    switch (frame.type) {
+      case "iframe":
+        return (
+          <iframe
+            src="https://example.com"
+            className="w-full h-full border-0"
+            title="Web Content"
+          />
+        );
+      case "video":
+        return (
+          <iframe
+            src="https://www.youtube.com/embed/dQw4w9WgXcQ"
+            className="w-full h-full border-0"
+            title="YouTube Video"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        );
+      case "component":
+        return <DemoContent title="React Component" color="bg-gradient-to-br from-purple-500 to-pink-500" />;
+      case "game":
+        return <DemoContent title="🎰 Slot Game" color="bg-gradient-to-br from-amber-500 to-red-500" />;
+      default:
+        return null;
+    }
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+      {/* Main Content */}
+      <main className="container mx-auto px-4 py-12">
+        <div className="text-center mb-12">
+          <h1 className="text-4xl md:text-5xl font-bold text-white mb-4">
+            GlideFrame Demo
           </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
+          <p className="text-lg text-slate-400 max-w-2xl mx-auto">
+            YouTube mini player benzeri draggable & resizable floating container.
+            Siteyi gezerken container köşede kalır.
           </p>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+
+        {/* Control Buttons */}
+        <div className="flex flex-wrap justify-center gap-4 mb-12">
+          <button
+            onClick={() => addFrame("component")}
+            className="flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            <Layout className="w-5 h-5" />
+            React Component
+          </button>
+          <button
+            onClick={() => addFrame("video")}
+            className="flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
           >
-            Documentation
-          </a>
+            <Video className="w-5 h-5" />
+            Video Embed
+          </button>
+          <button
+            onClick={() => addFrame("iframe")}
+            className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+          >
+            <Play className="w-5 h-5" />
+            iFrame Content
+          </button>
+          <button
+            onClick={() => addFrame("game")}
+            className="flex items-center gap-2 px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors"
+          >
+            <Gamepad2 className="w-5 h-5" />
+            Slot Game
+          </button>
+        </div>
+
+        {/* Features */}
+        <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700">
+            <h3 className="text-xl font-semibold text-white mb-2">Draggable</h3>
+            <p className="text-slate-400">
+              Header&apos;dan tutarak sürükleyin. Ekran sınırları içinde kalır.
+            </p>
+          </div>
+          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700">
+            <h3 className="text-xl font-semibold text-white mb-2">Resizable</h3>
+            <p className="text-slate-400">
+              Kenarlardan ve köşelerden boyutlandırın. Min/Max sınırları var.
+            </p>
+          </div>
+          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700">
+            <h3 className="text-xl font-semibold text-white mb-2">Multi-Instance</h3>
+            <p className="text-slate-400">
+              Birden fazla frame açın. Tıklanan üste gelir (z-index).
+            </p>
+          </div>
+        </div>
+
+        {/* Instructions */}
+        <div className="mt-12 text-center text-slate-500 text-sm">
+          <p>💡 Minimize: Sağ alt köşeye küçülür • Maximize: Full-screen olur • Double-click: Toggle maximize</p>
         </div>
       </main>
+
+      {/* GlideFrame Instances */}
+      {frames.map((frame, index) => (
+        <GlideFrame
+          key={frame.id}
+          id={frame.id}
+          title={frame.title}
+          defaultPosition={{
+            x: 100 + index * 50,
+            y: 100 + index * 50,
+          }}
+          defaultSize={{ width: 640, height: 400 }}
+          onClose={() => removeFrame(frame.id)}
+        >
+          {renderFrameContent(frame)}
+        </GlideFrame>
+      ))}
     </div>
   );
 }
