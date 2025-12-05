@@ -178,23 +178,28 @@ export function useGlideFrame(options: UseGlideFrameOptions): UseGlideFrameRetur
   }, []);
 
   // Check if position is near edge and dock automatically
+  // Only docks when frame is pushed firmly against the edge
   const checkAndDock = useCallback((position: Position): boolean => {
     const windowWidth = typeof window !== "undefined" ? window.innerWidth : 1920;
 
-    // Check left edge
-    if (position.x < DOCK_EDGE_THRESHOLD) {
+    // Get current frame width from state
+    const frameWidth = state.size.width;
+
+    // Check left edge - frame must be at x=0 or very close
+    if (position.x <= DOCK_EDGE_THRESHOLD) {
       dockLeft(position.y);
       return true;
     }
 
-    // Check right edge (considering frame width would push it off screen)
-    if (position.x > windowWidth - DOCK_EDGE_THRESHOLD) {
+    // Check right edge - frame's right side must touch the edge
+    // When frame is at right edge: position.x + frameWidth >= windowWidth
+    if (position.x + frameWidth >= windowWidth - DOCK_EDGE_THRESHOLD) {
       dockRight(position.y);
       return true;
     }
 
     return false;
-  }, [dockLeft, dockRight]);
+  }, [dockLeft, dockRight, state.size.width]);
 
   // Undock (restore from docked state)
   const undock = useCallback(() => {

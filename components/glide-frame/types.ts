@@ -86,7 +86,7 @@ export const DOCKED_HANDLE_WIDTH = 28; // Width of visible handle when docked
 export const DOCKED_HEIGHT = 100; // Height of docked handle
 
 // Edge detection threshold for swipe-to-dock
-export const DOCK_EDGE_THRESHOLD = 80; // px from edge to trigger dock
+export const DOCK_EDGE_THRESHOLD = 5; // px - only dock when frame hits the edge
 
 // Animation duration in ms
 export const ANIMATION_DURATION = 200;
