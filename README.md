@@ -1,103 +1,210 @@
 # GlideFrame
 
-YouTube mini player benzeri draggable ve resizable floating container. Next.js 16 için React library.
+[![Deploy to GitHub Pages](https://github.com/atknatk/glide-frame/actions/workflows/deploy.yml/badge.svg)](https://github.com/atknatk/glide-frame/actions/workflows/deploy.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Özellikler
+A YouTube mini-player inspired **draggable and resizable floating container** component for Next.js 16. Create picture-in-picture style floating windows that persist while users navigate your site.
 
-- 🖱️ **Draggable** - Header'dan tutarak sürüklenebilir
-- 📐 **Resizable** - Kenarlardan ve köşelerden boyutlandırılabilir
-- 📱 **Mobile First** - Touch support ve responsive tasarım
-- 🎯 **Multi-Instance** - Birden fazla frame açılabilir, tıklanan üste gelir
-- 💾 **localStorage** - Pozisyon ve boyut otomatik kaydedilir
-- ✨ **Glassmorphism** - Modern blur backdrop styling
-- 🌙 **Dark Mode** - shadcn/ui theme desteği
+## 🎬 Live Demo
 
-## Kurulum
+**[View Live Demo →](https://atknatk.github.io/glide-frame)**
+
+## ✨ Features
+
+- 🖱️ **Draggable** - Drag from header to reposition anywhere on screen
+- 📐 **Resizable** - Resize from edges and corners with smooth animations
+- 📱 **Mobile First** - Full touch support with responsive design
+- 🚀 **iOS-Style Momentum** - Physics-based throwing with velocity and friction
+- 🎯 **Dock to Edge** - Swipe to edge to minimize, tap handle to restore
+- 🎯 **Multi-Instance** - Multiple frames with automatic z-index management
+- 💾 **Persistent State** - Position and size saved to localStorage
+- ✨ **Glassmorphism** - Modern blur backdrop with beautiful styling
+- 🌙 **Dark Mode** - Full support for light/dark themes via shadcn/ui
+- ⚡ **60 FPS** - Hardware-accelerated animations for smooth performance
+- 🔧 **Fully Typed** - Complete TypeScript support with exported types
+
+## 📦 Installation
 
 ```bash
+# Install dependencies
 pnpm add react-rnd lucide-react
+
+# Initialize shadcn/ui (if not already done)
 pnpm dlx shadcn@latest init
 ```
 
-## Kullanım
+## 🚀 Quick Start
 
 ```tsx
 import { GlideFrame } from "@/components/glide-frame";
 
 function App() {
+  const [isOpen, setIsOpen] = useState(true);
+
+  if (!isOpen) return null;
+
   return (
     <GlideFrame
-      id="unique-id"
-      title="Frame Title"
+      id="my-frame"
+      title="My Floating Window"
       defaultPosition={{ x: 100, y: 100 }}
-      defaultSize={{ width: 800, height: 600 }}
-      onClose={() => console.log("Closed")}
+      defaultSize={{ width: 480, height: 320 }}
+      onClose={() => setIsOpen(false)}
     >
-      {/* iframe veya React component */}
-      <iframe src="https://example.com" className="w-full h-full" />
+      {/* Any content: iframe, video, React components */}
+      <iframe
+        src="https://example.com"
+        className="w-full h-full border-0"
+      />
     </GlideFrame>
   );
 }
 ```
 
-## Props
+## 📖 API Reference
 
-| Prop | Tip | Default | Açıklama |
-|------|-----|---------|----------|
-| `id` | `string` | - | Unique identifier (zorunlu) |
-| `title` | `string` | - | Header'da gösterilen başlık |
-| `defaultPosition` | `{ x, y }` | Sağ üst köşe | Başlangıç pozisyonu |
-| `defaultSize` | `{ width, height }` | 800x600 | Başlangıç boyutu |
-| `minSize` | `{ width, height }` | 400x300 | Minimum boyut |
-| `maxSize` | `{ width, height }` | Ekran - 40px | Maximum boyut |
-| `onClose` | `() => void` | - | Kapanış callback |
-| `onStateChange` | `(state) => void` | - | State değişim callback |
-| `persist` | `boolean` | `true` | localStorage'a kaydet |
-| `className` | `string` | - | Ek CSS class |
+### Props
 
-## Kontroller
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `id` | `string` | **required** | Unique identifier for the frame instance |
+| `title` | `string` | `undefined` | Title displayed in the header bar |
+| `defaultPosition` | `{ x: number, y: number }` | Top-right corner | Initial position on screen |
+| `defaultSize` | `{ width: number, height: number }` | `800x600` | Initial dimensions |
+| `minSize` | `{ width: number, height: number }` | `400x300` (desktop) / `280x200` (mobile) | Minimum resize constraints |
+| `maxSize` | `{ width: number, height: number }` | Screen size - 40px | Maximum resize constraints |
+| `onClose` | `() => void` | `undefined` | Callback when close button is clicked |
+| `onStateChange` | `(state: GlideFrameState) => void` | `undefined` | Callback when state changes |
+| `persist` | `boolean` | `true` | Whether to persist position/size to localStorage |
+| `className` | `string` | `undefined` | Additional CSS classes for the container |
+| `children` | `ReactNode` | `undefined` | Content to render inside the frame |
 
-- **Minimize**: Container 300x60 boyutuna küçülür, sağ alt köşeye gider
-- **Maximize**: Full-screen olur (20px padding), drag disable
-- **Close**: Fade-out animasyonu ile kapanır
-- **Restore**: Önceki boyut ve pozisyona döner
-- **Double-click Header**: Maximize/Restore toggle
+### State Object
 
-## Component Yapısı
+The `onStateChange` callback receives a state object with:
 
-```text
-/components/glide-frame
-├── GlideFrame.tsx       # Ana component
-├── GlideFrameHeader.tsx # Header + butonlar
-├── types.ts             # TypeScript tipleri
-├── index.ts             # Exports
-└── hooks/
-    └── useGlideFrame.ts # State management hook
+```typescript
+interface GlideFrameState {
+  position: { x: number; y: number };
+  size: { width: number; height: number };
+  isMinimized: boolean;
+  isMaximized: boolean;
+  isDocked: boolean;
+  dockedSide: 'left' | 'right' | null;
+  isVisible: boolean;
+  zIndex: number;
+}
 ```
 
-## Teknik Stack
+## 🎮 Controls & Interactions
 
-- Next.js 16
-- React 19
-- TypeScript
-- react-rnd
-- shadcn/ui
-- Tailwind CSS 4
-- lucide-react
+### Header Buttons
+| Button | Action |
+|--------|--------|
+| ◀ | Dock to left edge |
+| ▶ | Dock to right edge |
+| □ | Maximize to fullscreen |
+| ↺ | Restore from maximized/docked state |
+| × | Close the frame |
 
-## Geliştirme
+### Gestures
+- **Drag Header** - Move the frame around
+- **Double-click/tap Header** - Toggle maximize
+- **Throw to Edge** - Momentum-based dock (swipe fast toward edge)
+- **Tap Dock Handle** - Restore from docked state
+- **Resize Edges/Corners** - Resize the frame
+
+### Keyboard (when focused)
+- Frame receives focus on interaction for accessibility
+
+## 🎨 Customization
+
+### Custom Styling
+
+```tsx
+<GlideFrame
+  id="custom-frame"
+  title="Custom Styled"
+  className="border-2 border-blue-500"
+>
+  <div className="p-4">Custom content</div>
+</GlideFrame>
+```
+
+### Momentum Physics
+
+Adjust the physics constants in `types.ts`:
+
+```typescript
+export const MOMENTUM_FRICTION = 0.92;    // 0-1, higher = slides further
+export const MOMENTUM_MIN_VELOCITY = 0.5; // Stop threshold
+export const MOMENTUM_MULTIPLIER = 8;     // Velocity amplification
+export const DOCK_MIN_VELOCITY = 2;       // Min speed to trigger dock
+```
+
+## 📁 Project Structure
+
+```
+components/glide-frame/
+├── GlideFrame.tsx        # Main component with react-rnd integration
+├── GlideFrameHeader.tsx  # Header bar with control buttons
+├── types.ts              # TypeScript interfaces and constants
+├── index.ts              # Public exports
+└── hooks/
+    └── useGlideFrame.ts  # State management hook with localStorage
+```
+
+## 🛠️ Tech Stack
+
+| Technology | Purpose |
+|------------|---------|
+| [Next.js 16](https://nextjs.org/) | React framework with App Router |
+| [React 19](https://react.dev/) | UI library |
+| [TypeScript](https://www.typescriptlang.org/) | Type safety |
+| [react-rnd](https://github.com/bokuweb/react-rnd) | Drag and resize functionality |
+| [shadcn/ui](https://ui.shadcn.com/) | UI components and theming |
+| [Tailwind CSS 4](https://tailwindcss.com/) | Styling |
+| [Lucide React](https://lucide.dev/) | Icons |
+
+## 💻 Development
 
 ```bash
-# Bağımlılıkları yükle
+# Clone the repository
+git clone https://github.com/atknatk/glide-frame.git
+cd glide-frame
+
+# Install dependencies
 pnpm install
 
-# Development server
+# Start development server
 pnpm dev
 
-# Build
+# Build for production
 pnpm build
+
+# Run linting
+pnpm lint
 ```
 
-## Lisans
+## 🚀 Deployment
 
-MIT
+This project uses GitHub Actions for automatic deployment to GitHub Pages.
+
+Every push to `main` triggers:
+1. Install dependencies
+2. Build the Next.js application
+3. Deploy to GitHub Pages
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
