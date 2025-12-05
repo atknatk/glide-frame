@@ -15,6 +15,7 @@ import {
   MOBILE_DEFAULT_SIZE,
   DOCKED_HANDLE_WIDTH,
   DOCKED_HEIGHT,
+  DOCK_EDGE_THRESHOLD,
 } from "../types";
 
 // Global z-index counter
@@ -69,6 +70,7 @@ export function useGlideFrame(options: UseGlideFrameOptions): UseGlideFrameRetur
       isMaximized: false,
       isDocked: false,
       dockedSide: null,
+      dockedY: 0,
       isVisible: true,
       position,
       size,
@@ -117,23 +119,28 @@ export function useGlideFrame(options: UseGlideFrameOptions): UseGlideFrameRetur
   }, [persist, storageKey]);
 
   // Actions - Dock to left edge (iOS style minimize)
-  const dockLeft = useCallback(() => {
+  const dockLeft = useCallback((y?: number) => {
     setState((prev) => {
       if (prev.isDocked && prev.dockedSide === "left") return prev;
 
       const windowHeight = typeof window !== "undefined" ? window.innerHeight : 1080;
+      // Clamp y position to keep handle visible
+      const dockedY = y !== undefined
+        ? Math.max(20, Math.min(y, windowHeight - DOCKED_HEIGHT - 20))
+        : (windowHeight - DOCKED_HEIGHT) / 2;
 
       return {
         ...prev,
         isDocked: true,
         dockedSide: "left",
+        dockedY,
         isMinimized: true,
         isMaximized: false,
         previousPosition: prev.isDocked ? prev.previousPosition : prev.position,
         previousSize: prev.isDocked ? prev.previousSize : prev.size,
         position: {
           x: -prev.size.width + DOCKED_HANDLE_WIDTH,
-          y: (windowHeight - DOCKED_HEIGHT) / 2,
+          y: dockedY,
         },
         zIndex: ++globalZIndex,
       };
@@ -141,29 +148,53 @@ export function useGlideFrame(options: UseGlideFrameOptions): UseGlideFrameRetur
   }, []);
 
   // Dock to right edge
-  const dockRight = useCallback(() => {
+  const dockRight = useCallback((y?: number) => {
     setState((prev) => {
       if (prev.isDocked && prev.dockedSide === "right") return prev;
 
       const windowWidth = typeof window !== "undefined" ? window.innerWidth : 1920;
       const windowHeight = typeof window !== "undefined" ? window.innerHeight : 1080;
+      // Clamp y position to keep handle visible
+      const dockedY = y !== undefined
+        ? Math.max(20, Math.min(y, windowHeight - DOCKED_HEIGHT - 20))
+        : (windowHeight - DOCKED_HEIGHT) / 2;
 
       return {
         ...prev,
         isDocked: true,
         dockedSide: "right",
+        dockedY,
         isMinimized: true,
         isMaximized: false,
         previousPosition: prev.isDocked ? prev.previousPosition : prev.position,
         previousSize: prev.isDocked ? prev.previousSize : prev.size,
         position: {
           x: windowWidth - DOCKED_HANDLE_WIDTH,
-          y: (windowHeight - DOCKED_HEIGHT) / 2,
+          y: dockedY,
         },
         zIndex: ++globalZIndex,
       };
     });
   }, []);
+
+  // Check if position is near edge and dock automatically
+  const checkAndDock = useCallback((position: Position): boolean => {
+    const windowWidth = typeof window !== "undefined" ? window.innerWidth : 1920;
+
+    // Check left edge
+    if (position.x < DOCK_EDGE_THRESHOLD) {
+      dockLeft(position.y);
+      return true;
+    }
+
+    // Check right edge (considering frame width would push it off screen)
+    if (position.x > windowWidth - DOCK_EDGE_THRESHOLD) {
+      dockRight(position.y);
+      return true;
+    }
+
+    return false;
+  }, [dockLeft, dockRight]);
 
   // Undock (restore from docked state)
   const undock = useCallback(() => {
@@ -174,6 +205,7 @@ export function useGlideFrame(options: UseGlideFrameOptions): UseGlideFrameRetur
         ...prev,
         isDocked: false,
         dockedSide: null,
+        dockedY: 0,
         isMinimized: false,
         position: prev.previousPosition || prev.position,
         size: prev.previousSize || prev.size,
@@ -270,6 +302,7 @@ export function useGlideFrame(options: UseGlideFrameOptions): UseGlideFrameRetur
       updatePosition,
       updateSize,
       bringToFront,
+      checkAndDock,
     },
     computed: {
       canDrag,

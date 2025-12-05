@@ -1,8 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { GlideFrame } from "@/components/glide-frame";
 import { Play, Video, Gamepad2, Layout } from "lucide-react";
+
+const MOBILE_BREAKPOINT = 768;
+
+// Hook for responsive size
+function useIsMobile() {
+  return useSyncExternalStore(
+    (callback) => {
+      window.addEventListener("resize", callback);
+      return () => window.removeEventListener("resize", callback);
+    },
+    () => window.innerWidth < MOBILE_BREAKPOINT,
+    () => false
+  );
+}
 
 // Demo component to show inside GlideFrame
 function DemoContent({ title, color }: { title: string; color: string }) {
@@ -10,11 +24,11 @@ function DemoContent({ title, color }: { title: string; color: string }) {
     <div
       className={`h-full w-full flex flex-col items-center justify-center gap-4 ${color}`}
     >
-      <h2 className="text-2xl font-bold text-white">{title}</h2>
-      <p className="text-white/80 text-center px-4">
-        This is a draggable and resizable container.
+      <h2 className="text-xl md:text-2xl font-bold text-white">{title}</h2>
+      <p className="text-white/80 text-center px-4 text-sm md:text-base">
+        Draggable & resizable container.
         <br />
-        Try moving it around!
+        Kenara sürükle → Dock!
       </p>
     </div>
   );
@@ -28,6 +42,7 @@ interface FrameConfig {
 
 export default function Home() {
   const [frames, setFrames] = useState<FrameConfig[]>([]);
+  const isMobile = useIsMobile();
 
   const addFrame = (type: FrameConfig["type"]) => {
     const id = `frame-${Date.now()}`;
@@ -73,6 +88,23 @@ export default function Home() {
     }
   };
 
+  // Responsive frame sizes
+  const getFrameSize = () => {
+    if (isMobile) {
+      const width = typeof window !== "undefined" ? window.innerWidth - 40 : 300;
+      return { width: Math.min(width, 340), height: 280 };
+    }
+    return { width: 480, height: 320 };
+  };
+
+  // Responsive frame position
+  const getFramePosition = (index: number) => {
+    if (isMobile) {
+      return { x: 20, y: 100 + index * 30 };
+    }
+    return { x: 100 + index * 40, y: 100 + index * 40 };
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       {/* Main Content */}
@@ -88,62 +120,62 @@ export default function Home() {
         </div>
 
         {/* Control Buttons */}
-        <div className="flex flex-wrap justify-center gap-4 mb-12">
+        <div className="flex flex-wrap justify-center gap-2 md:gap-4 mb-8 md:mb-12">
           <button
             onClick={() => addFrame("component")}
-            className="flex items-center gap-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
+            className="flex items-center gap-1.5 md:gap-2 px-3 md:px-6 py-2 md:py-3 bg-purple-600 hover:bg-purple-700 active:scale-95 text-white text-sm md:text-base rounded-lg transition-all"
           >
-            <Layout className="w-5 h-5" />
-            React Component
+            <Layout className="w-4 h-4 md:w-5 md:h-5" />
+            <span className="hidden sm:inline">React</span> Component
           </button>
           <button
             onClick={() => addFrame("video")}
-            className="flex items-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+            className="flex items-center gap-1.5 md:gap-2 px-3 md:px-6 py-2 md:py-3 bg-red-600 hover:bg-red-700 active:scale-95 text-white text-sm md:text-base rounded-lg transition-all"
           >
-            <Video className="w-5 h-5" />
-            Video Embed
+            <Video className="w-4 h-4 md:w-5 md:h-5" />
+            Video
           </button>
           <button
             onClick={() => addFrame("iframe")}
-            className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+            className="flex items-center gap-1.5 md:gap-2 px-3 md:px-6 py-2 md:py-3 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-sm md:text-base rounded-lg transition-all"
           >
-            <Play className="w-5 h-5" />
-            iFrame Content
+            <Play className="w-4 h-4 md:w-5 md:h-5" />
+            iFrame
           </button>
           <button
             onClick={() => addFrame("game")}
-            className="flex items-center gap-2 px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors"
+            className="flex items-center gap-1.5 md:gap-2 px-3 md:px-6 py-2 md:py-3 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white text-sm md:text-base rounded-lg transition-all"
           >
-            <Gamepad2 className="w-5 h-5" />
-            Slot Game
+            <Gamepad2 className="w-4 h-4 md:w-5 md:h-5" />
+            Game
           </button>
         </div>
 
         {/* Features */}
-        <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
-          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700">
-            <h3 className="text-xl font-semibold text-white mb-2">Draggable</h3>
-            <p className="text-slate-400">
-              Header&apos;dan tutarak sürükleyin. Ekran sınırları içinde kalır.
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-6 max-w-4xl mx-auto">
+          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-4 md:p-6 border border-slate-700">
+            <h3 className="text-lg md:text-xl font-semibold text-white mb-1 md:mb-2">📱 Swipe to Dock</h3>
+            <p className="text-slate-400 text-sm md:text-base">
+              Kenara sürükle, dock olsun. Centik&apos;e dokun, geri gelsin.
             </p>
           </div>
-          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700">
-            <h3 className="text-xl font-semibold text-white mb-2">Resizable</h3>
-            <p className="text-slate-400">
-              Kenarlardan ve köşelerden boyutlandırın. Min/Max sınırları var.
+          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-4 md:p-6 border border-slate-700">
+            <h3 className="text-lg md:text-xl font-semibold text-white mb-1 md:mb-2">🔄 Draggable</h3>
+            <p className="text-slate-400 text-sm md:text-base">
+              Header&apos;dan sürükle. Ekran sınırları içinde kalır.
             </p>
           </div>
-          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700">
-            <h3 className="text-xl font-semibold text-white mb-2">Multi-Instance</h3>
-            <p className="text-slate-400">
-              Birden fazla frame açın. Tıklanan üste gelir (z-index).
+          <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-4 md:p-6 border border-slate-700">
+            <h3 className="text-lg md:text-xl font-semibold text-white mb-1 md:mb-2">📐 Resizable</h3>
+            <p className="text-slate-400 text-sm md:text-base">
+              Köşelerden boyutlandır. Multi-instance z-index.
             </p>
           </div>
         </div>
 
         {/* Instructions */}
-        <div className="mt-12 text-center text-slate-500 text-sm">
-          <p>💡 Minimize: Sağ alt köşeye küçülür • Maximize: Full-screen olur • Double-click: Toggle maximize</p>
+        <div className="mt-8 md:mt-12 text-center text-slate-500 text-xs md:text-sm px-4">
+          <p>💡 Kenara sürükle: Dock • Centik&apos;e tıkla: Geri getir • Double-tap: Maximize</p>
         </div>
       </main>
 
@@ -153,11 +185,8 @@ export default function Home() {
           key={frame.id}
           id={frame.id}
           title={frame.title}
-          defaultPosition={{
-            x: 100 + index * 50,
-            y: 100 + index * 50,
-          }}
-          defaultSize={{ width: 640, height: 400 }}
+          defaultPosition={getFramePosition(index)}
+          defaultSize={getFrameSize()}
           onClose={() => removeFrame(frame.id)}
         >
           {renderFrameContent(frame)}

@@ -21,6 +21,7 @@ export interface GlideFrameState {
   isMaximized: boolean;
   isDocked: boolean;
   dockedSide: DockSide;
+  dockedY: number; // Y position of the docked handle
   isVisible: boolean;
   position: Position;
   size: Size;
@@ -81,8 +82,11 @@ export const MOBILE_DEFAULT_SIZE: Size = { width: 320, height: 400 };
 export const MOBILE_MIN_SIZE: Size = { width: 280, height: 200 };
 
 // Docked (minimized) state
-export const DOCKED_HANDLE_WIDTH = 24; // Width of visible handle when docked
-export const DOCKED_HEIGHT = 120; // Height of docked frame
+export const DOCKED_HANDLE_WIDTH = 28; // Width of visible handle when docked
+export const DOCKED_HEIGHT = 100; // Height of docked handle
+
+// Edge detection threshold for swipe-to-dock
+export const DOCK_EDGE_THRESHOLD = 80; // px from edge to trigger dock
 
 // Animation duration in ms
 export const ANIMATION_DURATION = 200;
@@ -100,8 +104,8 @@ export const MAXIMIZE_PADDING = 20;
 export interface UseGlideFrameReturn {
   state: GlideFrameState;
   actions: {
-    dockLeft: () => void;
-    dockRight: () => void;
+    dockLeft: (y?: number) => void;
+    dockRight: (y?: number) => void;
     undock: () => void;
     maximize: () => void;
     restore: () => void;
@@ -109,6 +113,7 @@ export interface UseGlideFrameReturn {
     updatePosition: (position: Position) => void;
     updateSize: (size: Size) => void;
     bringToFront: () => void;
+    checkAndDock: (position: Position) => boolean; // Returns true if docked
   };
   computed: {
     canDrag: boolean;

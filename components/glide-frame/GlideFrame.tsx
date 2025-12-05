@@ -90,8 +90,6 @@ export function GlideFrame({
   // If docked, render the dock handle instead of Rnd
   if (state.isDocked) {
     const isDockedLeft = state.dockedSide === "left";
-    const windowHeight = typeof window !== "undefined" ? window.innerHeight : 1080;
-    const topPosition = (windowHeight - DOCKED_HEIGHT) / 2;
 
     return (
       <div
@@ -100,7 +98,7 @@ export function GlideFrame({
         style={{
           zIndex: state.zIndex,
           position: "fixed",
-          top: topPosition,
+          top: state.dockedY,
           [isDockedLeft ? "left" : "right"]: 0,
           width: DOCKED_HANDLE_WIDTH,
           height: DOCKED_HEIGHT,
@@ -110,12 +108,13 @@ export function GlideFrame({
         className={cn(
           "cursor-pointer",
           "flex items-center justify-center",
-          isDockedLeft ? "rounded-r-lg" : "rounded-l-lg",
+          isDockedLeft ? "rounded-r-xl" : "rounded-l-xl",
           "bg-primary/90 backdrop-blur-sm",
           "shadow-lg shadow-black/20",
           "border border-border/50",
           isDockedLeft ? "border-l-0" : "border-r-0",
-          "hover:bg-primary hover:scale-105",
+          "hover:bg-primary",
+          "hover:w-10",
           "active:scale-95",
           "transition-all duration-150",
           "touch-manipulation"
@@ -125,9 +124,9 @@ export function GlideFrame({
         title={`Restore ${title}`}
       >
         {isDockedLeft ? (
-          <ChevronRight className="h-4 w-4 text-primary-foreground" />
+          <ChevronRight className="h-5 w-5 text-primary-foreground" />
         ) : (
-          <ChevronLeft className="h-4 w-4 text-primary-foreground" />
+          <ChevronLeft className="h-5 w-5 text-primary-foreground" />
         )}
       </div>
     );
@@ -156,7 +155,12 @@ export function GlideFrame({
       } : false}
       onDragStart={() => actions.bringToFront()}
       onDragStop={(_e, d) => {
-        actions.updatePosition({ x: d.x, y: d.y });
+        const newPosition = { x: d.x, y: d.y };
+        // Check if dragged to edge - if so, dock instead of just updating position
+        const didDock = actions.checkAndDock(newPosition);
+        if (!didDock) {
+          actions.updatePosition(newPosition);
+        }
       }}
       onResizeStart={() => actions.bringToFront()}
       onResizeStop={(_e, _direction, ref, _delta, position) => {
