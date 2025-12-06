@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, CSSProperties } from "react";
 
 // Position type
 export interface Position {
@@ -14,6 +14,46 @@ export interface Size {
 
 // Dock side type
 export type DockSide = "left" | "right" | null;
+
+// Header style options
+export interface HeaderStyleOptions {
+  /** Background color or gradient */
+  backgroundColor?: string;
+  /** Text color */
+  textColor?: string;
+  /** Button/icon color */
+  buttonColor?: string;
+  /** Button hover color */
+  buttonHoverColor?: string;
+  /** Header height in pixels */
+  height?: number;
+  /** Show maximize button */
+  showMaximize?: boolean;
+  /** Show close button */
+  showClose?: boolean;
+  /** Custom class name for header */
+  className?: string;
+  /** Custom inline styles */
+  style?: CSSProperties;
+}
+
+// Frame style options
+export interface FrameStyleOptions {
+  /** Background color or gradient */
+  backgroundColor?: string;
+  /** Border color */
+  borderColor?: string;
+  /** Border width in pixels */
+  borderWidth?: number;
+  /** Border radius in pixels */
+  borderRadius?: number;
+  /** Box shadow */
+  boxShadow?: string;
+  /** Custom class name for frame */
+  className?: string;
+  /** Custom inline styles */
+  style?: CSSProperties;
+}
 
 // GlideFrame state
 export interface GlideFrameState {
@@ -55,6 +95,10 @@ export interface GlideFrameProps {
   maxSize?: Size;
   /** Whether to persist state to localStorage */
   persist?: boolean;
+  /** Header style customization */
+  headerStyle?: HeaderStyleOptions;
+  /** Frame style customization */
+  frameStyle?: FrameStyleOptions;
 }
 
 // GlideFrame header props
@@ -62,11 +106,11 @@ export interface GlideFrameHeaderProps {
   title: string;
   isDocked: boolean;
   isMaximized: boolean;
-  onDockLeft: () => void;
-  onDockRight: () => void;
   onMaximize: () => void;
   onRestore: () => void;
   onClose: () => void;
+  /** Style options */
+  styleOptions?: HeaderStyleOptions;
 }
 
 // Default values

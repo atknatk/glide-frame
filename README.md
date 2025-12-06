@@ -35,6 +35,8 @@ pnpm dlx shadcn@latest init
 
 ## 🚀 Quick Start
 
+### Basic Usage
+
 ```tsx
 import { GlideFrame } from "@/components/glide-frame";
 
@@ -58,6 +60,46 @@ function App() {
       />
     </GlideFrame>
   );
+}
+```
+
+### Persistent Frames Across Pages
+
+Use `GlideFrameProvider` in your layout to keep frames visible while navigating:
+
+```tsx
+// app/layout.tsx
+import { GlideFrameProvider } from "@/components/glide-frame";
+
+export default function RootLayout({ children }) {
+  return (
+    <html>
+      <body>
+        <GlideFrameProvider>
+          {children}
+        </GlideFrameProvider>
+      </body>
+    </html>
+  );
+}
+
+// Any page component
+import { useGlideFrameContext } from "@/components/glide-frame";
+
+function MyPage() {
+  const { openFrame, closeFrame } = useGlideFrameContext();
+
+  const handleOpenVideo = () => {
+    openFrame({
+      id: "video-player",
+      title: "Video Player",
+      content: <iframe src="https://youtube.com/embed/..." />,
+      defaultSize: { width: 480, height: 320 },
+      headerStyle: { backgroundColor: "#dc2626", buttonColor: "#fff" },
+    });
+  };
+
+  return <button onClick={handleOpenVideo}>Open Video</button>;
 }
 ```
 
@@ -99,15 +141,15 @@ interface GlideFrameState {
 ## 🎮 Controls & Interactions
 
 ### Header Buttons
+
 | Button | Action |
 |--------|--------|
-| ◀ | Dock to left edge |
-| ▶ | Dock to right edge |
 | □ | Maximize to fullscreen |
 | ↺ | Restore from maximized/docked state |
 | × | Close the frame |
 
 ### Gestures
+
 - **Drag Header** - Move the frame around
 - **Double-click/tap Header** - Toggle maximize
 - **Throw to Edge** - Momentum-based dock (swipe fast toward edge)
@@ -115,19 +157,67 @@ interface GlideFrameState {
 - **Resize Edges/Corners** - Resize the frame
 
 ### Keyboard (when focused)
+
 - Frame receives focus on interaction for accessibility
 
 ## 🎨 Customization
 
-### Custom Styling
+### Header Style Options
 
 ```tsx
 <GlideFrame
-  id="custom-frame"
-  title="Custom Styled"
-  className="border-2 border-blue-500"
+  id="styled-frame"
+  title="Custom Header"
+  headerStyle={{
+    backgroundColor: "#dc2626",      // Background color or gradient
+    textColor: "#ffffff",            // Title text color
+    buttonColor: "#ffffff",          // Icon button color
+    buttonHoverColor: "#ffcccc",     // Button hover color
+    height: 40,                      // Header height in pixels
+    showMaximize: true,              // Show/hide maximize button
+    showClose: true,                 // Show/hide close button
+  }}
 >
-  <div className="p-4">Custom content</div>
+  <YourContent />
+</GlideFrame>
+```
+
+### Frame Style Options
+
+```tsx
+<GlideFrame
+  id="styled-frame"
+  title="Custom Frame"
+  frameStyle={{
+    backgroundColor: "#1e293b",      // Frame background color
+    borderColor: "#dc2626",          // Border color
+    borderWidth: 2,                  // Border width in pixels
+    borderRadius: 12,                // Corner radius in pixels
+    boxShadow: "0 0 30px rgba(0,0,0,0.3)", // Custom shadow
+  }}
+>
+  <YourContent />
+</GlideFrame>
+```
+
+### Combined Example
+
+```tsx
+<GlideFrame
+  id="video-player"
+  title="Video Player"
+  headerStyle={{
+    backgroundColor: "linear-gradient(90deg, #f59e0b, #ef4444)",
+    textColor: "#fff",
+    buttonColor: "#fff",
+    height: 36,
+  }}
+  frameStyle={{
+    borderRadius: 16,
+    boxShadow: "0 0 30px rgba(245, 158, 11, 0.3)",
+  }}
+>
+  <iframe src="https://youtube.com/embed/..." />
 </GlideFrame>
 ```
 
@@ -144,14 +234,15 @@ export const DOCK_MIN_VELOCITY = 2;       // Min speed to trigger dock
 
 ## 📁 Project Structure
 
-```
+```text
 components/glide-frame/
-├── GlideFrame.tsx        # Main component with react-rnd integration
-├── GlideFrameHeader.tsx  # Header bar with control buttons
-├── types.ts              # TypeScript interfaces and constants
-├── index.ts              # Public exports
+├── GlideFrame.tsx          # Main component with react-rnd integration
+├── GlideFrameHeader.tsx    # Header bar with control buttons
+├── GlideFrameProvider.tsx  # Context provider for persistent frames
+├── types.ts                # TypeScript interfaces and constants
+├── index.ts                # Public exports
 └── hooks/
-    └── useGlideFrame.ts  # State management hook with localStorage
+    └── useGlideFrame.ts    # State management hook with localStorage
 ```
 
 ## 🛠️ Tech Stack
@@ -191,6 +282,7 @@ pnpm lint
 This project uses GitHub Actions for automatic deployment to GitHub Pages.
 
 Every push to `main` triggers:
+
 1. Install dependencies
 2. Build the Next.js application
 3. Deploy to GitHub Pages

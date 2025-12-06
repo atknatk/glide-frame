@@ -1,0 +1,145 @@
+# Automated Release Workflow
+#
+# Triggers when a PR is merged to main branch.
+# Uses conventional commits to determine version bump:
+#   - fix: → patch (0.0.X)
+#   - feat: → minor (0.X.0)
+#   - feat!: or BREAKING CHANGE → major (X.0.0)
+#
+# Steps:
+# 1. Analyze commits to determine version bump
+# 2. Update package.json version
+# 3. Build the library
+# 4. Publish to npm
+# 5. Create GitHub release with changelog
+# 6. Push version bump commit and tag
+#
+# Required secrets:
+#   - NPM_TOKEN: npm access token with publish permission
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '.github/workflows/deploy.yml'
+      - 'README.md'
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    # Skip if commit message contains [skip-release] or is a version bump commit
+    if: "!contains(github.event.head_commit.message, '[skip-release]') && !startsWith(github.event.head_commit.message, 'chore(release):')"
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Determine version bump
+        id: version
+        run: |
+          # Get commits since last tag
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          
+          if [ -z "$LAST_TAG" ]; then
+            COMMITS=$(git log --oneline)
+          else
+            COMMITS=$(git log ${LAST_TAG}..HEAD --oneline)
+          fi
+          
+          echo "Commits since last release:"
+          echo "$COMMITS"
+          
+          # Determine bump type from conventional commits
+          if echo "$COMMITS" | grep -qE "^[a-f0-9]+ (feat|fix|refactor|perf|docs|style|test|chore)(\(.+\))?!:"; then
+            BUMP="major"
+          elif echo "$COMMITS" | grep -qi "BREAKING CHANGE"; then
+            BUMP="major"
+          elif echo "$COMMITS" | grep -qE "^[a-f0-9]+ feat(\(.+\))?:"; then
+            BUMP="minor"
+          elif echo "$COMMITS" | grep -qE "^[a-f0-9]+ (fix|perf)(\(.+\))?:"; then
+            BUMP="patch"
+          else
+            BUMP="patch"
+          fi
+          
+          echo "bump=$BUMP" >> $GITHUB_OUTPUT
+          echo "Version bump: $BUMP"
+
+      - name: Bump version
+        id: bump
+        run: |
+          # Get current version
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "Current version: $CURRENT_VERSION"
+          
+          # Bump version
+          npm version ${{ steps.version.outputs.bump }} --no-git-tag-version
+          
+          # Get new version
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "New version: $NEW_VERSION"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build library
+        run: pnpm build:lib
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          
+          if [ -z "$LAST_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" | head -50)
+          else
+            CHANGELOG=$(git log ${LAST_TAG}..HEAD --pretty=format:"- %s (%h)")
+          fi
+          
+          # Write to file for multiline support
+          echo "$CHANGELOG" > /tmp/changelog.txt
+          echo "changelog_file=/tmp/changelog.txt" >> $GITHUB_OUTPUT
+
+      - name: Publish to npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore(release): v${{ steps.bump.outputs.new_version }} [skip-release]"
+          git tag -a "v${{ steps.bump.outputs.new_version }}" -m "Release v${{ steps.bump.outputs.new_version }}"
+          git push origin main --follow-tags
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+        with:
+          tag_name: v${{ steps.bump.outputs.new_version }}
+          release_name: v${{ steps.bump.outputs.new_version }}
+          body_path: /tmp/changelog.txt
+          draft: false
+          prerelease: false
+

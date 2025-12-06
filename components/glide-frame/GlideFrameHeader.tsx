@@ -1,22 +1,36 @@
 "use client";
 
 import { useCallback, useRef } from "react";
-import { Maximize2, X, RotateCcw, PanelLeftClose, PanelRightClose } from "lucide-react";
+import { Maximize2, X, RotateCcw } from "lucide-react";
 import { GlideFrameHeaderProps } from "./types";
 import { cn } from "@/lib/utils";
+
+const DEFAULT_HEADER_HEIGHT = 44;
 
 export function GlideFrameHeader({
   title,
   isDocked,
   isMaximized,
-  onDockLeft,
-  onDockRight,
   onMaximize,
   onRestore,
   onClose,
+  styleOptions,
 }: GlideFrameHeaderProps) {
   const showRestore = isDocked || isMaximized;
   const lastTapRef = useRef<number>(0);
+
+  // Destructure style options with defaults
+  const {
+    backgroundColor,
+    textColor,
+    buttonColor,
+    buttonHoverColor,
+    height = DEFAULT_HEADER_HEIGHT,
+    showMaximize = true,
+    showClose = true,
+    className: headerClassName,
+    style: headerStyle,
+  } = styleOptions || {};
 
   // Double tap to maximize/restore on mobile
   const handleDoubleTap = useCallback(() => {
@@ -26,12 +40,23 @@ export function GlideFrameHeader({
     if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
       if (isMaximized || isDocked) {
         onRestore();
-      } else {
+      } else if (showMaximize) {
         onMaximize();
       }
     }
     lastTapRef.current = now;
-  }, [isMaximized, isDocked, onMaximize, onRestore]);
+  }, [isMaximized, isDocked, onMaximize, onRestore, showMaximize]);
+
+  // Button style with custom colors
+  const buttonStyle = buttonColor ? { color: buttonColor } : undefined;
+  const buttonClassName = cn(
+    "glide-frame-button",
+    "p-1.5 rounded-md",
+    "transition-colors duration-150",
+    "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1",
+    !buttonColor && "text-muted-foreground",
+    !buttonHoverColor && "hover:text-foreground hover:bg-accent"
+  );
 
   return (
     <div
@@ -39,21 +64,33 @@ export function GlideFrameHeader({
       onDoubleClick={() => {
         if (isMaximized || isDocked) {
           onRestore();
-        } else {
+        } else if (showMaximize) {
           onMaximize();
         }
       }}
+      style={{
+        height,
+        background: backgroundColor,
+        color: textColor,
+        ...headerStyle,
+      }}
       className={cn(
-        "flex items-center justify-between px-3 py-2",
-        "bg-background/80 backdrop-blur-sm",
+        "flex items-center justify-between px-3",
+        !backgroundColor && "bg-background/80 backdrop-blur-sm",
         "border-b border-border/50",
         "select-none touch-manipulation",
-        !isMaximized && !isDocked && "cursor-grab active:cursor-grabbing"
+        !isMaximized && !isDocked && "cursor-grab active:cursor-grabbing",
+        headerClassName
       )}
     >
       {/* Title */}
       <div className="flex items-center gap-2 flex-1 min-w-0">
-        <span className="text-sm font-medium text-foreground truncate">
+        <span
+          className={cn(
+            "text-sm font-medium truncate",
+            !textColor && "text-foreground"
+          )}
+        >
           {title}
         </span>
       </div>
@@ -65,15 +102,14 @@ export function GlideFrameHeader({
           <button
             onClick={(e) => {
               e.stopPropagation();
+              e.preventDefault();
               onRestore();
             }}
-            className={cn(
-              "p-1.5 rounded-md",
-              "text-muted-foreground hover:text-foreground",
-              "hover:bg-accent",
-              "transition-colors duration-150",
-              "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
-            )}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            style={buttonStyle}
+            className={buttonClassName}
             aria-label="Restore"
             title="Restore"
           >
@@ -81,62 +117,19 @@ export function GlideFrameHeader({
           </button>
         )}
 
-        {/* Dock Left Button - hidden when docked */}
-        {!isDocked && !isMaximized && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDockLeft();
-            }}
-            className={cn(
-              "p-1.5 rounded-md",
-              "text-muted-foreground hover:text-foreground",
-              "hover:bg-accent",
-              "transition-colors duration-150",
-              "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
-            )}
-            aria-label="Dock Left"
-            title="Dock Left"
-          >
-            <PanelLeftClose className="h-4 w-4" />
-          </button>
-        )}
-
-        {/* Dock Right Button - hidden when docked */}
-        {!isDocked && !isMaximized && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDockRight();
-            }}
-            className={cn(
-              "p-1.5 rounded-md",
-              "text-muted-foreground hover:text-foreground",
-              "hover:bg-accent",
-              "transition-colors duration-150",
-              "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
-            )}
-            aria-label="Dock Right"
-            title="Dock Right"
-          >
-            <PanelRightClose className="h-4 w-4" />
-          </button>
-        )}
-
         {/* Maximize Button - hidden when maximized or docked */}
-        {!isMaximized && !isDocked && (
+        {showMaximize && !isMaximized && !isDocked && (
           <button
             onClick={(e) => {
               e.stopPropagation();
+              e.preventDefault();
               onMaximize();
             }}
-            className={cn(
-              "p-1.5 rounded-md",
-              "text-muted-foreground hover:text-foreground",
-              "hover:bg-accent",
-              "transition-colors duration-150",
-              "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
-            )}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            style={buttonStyle}
+            className={buttonClassName}
             aria-label="Maximize"
             title="Maximize"
           >
@@ -145,23 +138,27 @@ export function GlideFrameHeader({
         )}
 
         {/* Close Button */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onClose();
-          }}
-          className={cn(
-            "p-1.5 rounded-md",
-            "text-muted-foreground hover:text-destructive",
-            "hover:bg-destructive/10",
-            "transition-colors duration-150",
-            "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1"
-          )}
-          aria-label="Close"
-          title="Close"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        {showClose && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              onClose();
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            style={buttonStyle}
+            className={cn(
+              buttonClassName,
+              !buttonColor && "hover:text-destructive hover:bg-destructive/10"
+            )}
+            aria-label="Close"
+            title="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
       </div>
     </div>
   );
