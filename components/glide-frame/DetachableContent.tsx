@@ -56,20 +56,17 @@ export function useDetachableState<T>(id: string, initialValue: T): [T, (value: 
 }
 
 // ============================================================================
-// Detached Content Provider - keeps floating content alive across navigation
-// Content is ALWAYS rendered in provider, only CSS positioning changes
+// Detached Content Provider - manages floating windows across navigation
+// Key: Content is stored ONCE on first registration, never updated after
 // ============================================================================
 
 interface RegisteredContent {
   id: string;
   title: string;
-  content: ReactNode;
+  content: ReactNode; // Stored once, never updated
   headerStyle?: HeaderStyleOptions;
   frameStyle?: FrameStyleOptions;
   lockAspectRatio: boolean;
-  // Slot position (where inline content should appear)
-  slotRect: DOMRect | null;
-  // Floating state
   isDetached: boolean;
   position: { x: number; y: number };
   size: { width: number; height: number };
@@ -85,13 +82,13 @@ interface DetachedContentContextValue {
     headerStyle?: HeaderStyleOptions;
     frameStyle?: FrameStyleOptions;
     lockAspectRatio: boolean;
+    initialRect: DOMRect;
   }) => void;
   unregisterContent: (id: string) => void;
-  updateSlotRect: (id: string, rect: DOMRect | null) => void;
   detachContent: (id: string) => void;
   attachContent: (id: string) => void;
   isDetached: (id: string) => boolean;
-  getContent: (id: string) => RegisteredContent | undefined;
+  updatePosition: (id: string, updates: Partial<RegisteredContent>) => void;
 }
 
 const DetachedContentContext = createContext<DetachedContentContextValue | null>(null);
@@ -108,29 +105,27 @@ export function DetachedContentProvider({ children }: { children: ReactNode }) {
     headerStyle?: HeaderStyleOptions;
     frameStyle?: FrameStyleOptions;
     lockAspectRatio: boolean;
+    initialRect: DOMRect;
   }) => {
     setContents(prev => {
-      const existing = prev.get(id);
-      // If already registered and detached, keep the detached state but update content
-      if (existing?.isDetached) {
-        const next = new Map(prev);
-        next.set(id, { ...existing, content, ...options });
-        return next;
-      }
-      // New registration or re-registration when not detached
+      // If already exists, DON'T update content - just return existing
+      if (prev.has(id)) return prev;
+
+      const { initialRect, ...rest } = options;
+      const headerHeight = options.headerStyle?.height || 44;
+
       const next = new Map(prev);
       next.set(id, {
         id,
-        content,
-        ...options,
-        slotRect: existing?.slotRect || null,
-        isDetached: existing?.isDetached || false,
-        position: existing?.position || { x: 20, y: 80 },
-        size: existing?.size || { width: 480, height: 320 },
-        zIndex: existing?.zIndex || 10000,
-        isMaximized: existing?.isMaximized || false,
-        preMaximizeState: existing?.preMaximizeState || null,
-        aspectRatio: existing?.aspectRatio || false,
+        content, // Store content ONCE
+        ...rest,
+        isDetached: false,
+        position: { x: 20, y: 80 },
+        size: { width: initialRect.width, height: initialRect.height + headerHeight },
+        zIndex: 10000,
+        isMaximized: false,
+        preMaximizeState: null,
+        aspectRatio: false,
       });
       return next;
     });
@@ -139,7 +134,7 @@ export function DetachedContentProvider({ children }: { children: ReactNode }) {
   const unregisterContent = useCallback((id: string) => {
     setContents(prev => {
       const item = prev.get(id);
-      // Don't unregister if detached - keep floating
+      // Don't unregister if detached - keep floating across navigation
       if (item?.isDetached) return prev;
       const next = new Map(prev);
       next.delete(id);
@@ -147,33 +142,22 @@ export function DetachedContentProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const updateSlotRect = useCallback((id: string, rect: DOMRect | null) => {
-    setContents(prev => {
-      const item = prev.get(id);
-      if (!item) return prev;
-      const next = new Map(prev);
-      next.set(id, { ...item, slotRect: rect });
-      return next;
-    });
-  }, []);
-
   const detachContent = useCallback((id: string) => {
     setContents(prev => {
       const item = prev.get(id);
-      if (!item || !item.slotRect) return prev;
+      if (!item) return prev;
 
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
       const isMobile = viewportWidth < 768;
-      const headerHeight = item.headerStyle?.height || 44;
 
       const maxWidth = viewportWidth - 40;
       const maxHeight = viewportHeight - 100;
 
       const width = isMobile
-        ? Math.min(item.slotRect.width, maxWidth)
-        : Math.min(Math.max(item.slotRect.width, 400), maxWidth);
-      const height = Math.min(item.slotRect.height + headerHeight, maxHeight);
+        ? Math.min(item.size.width, maxWidth)
+        : Math.min(Math.max(item.size.width, 400), maxWidth);
+      const height = Math.min(item.size.height, maxHeight);
 
       const next = new Map(prev);
       next.set(id, {
@@ -202,11 +186,7 @@ export function DetachedContentProvider({ children }: { children: ReactNode }) {
     return contents.get(id)?.isDetached ?? false;
   }, [contents]);
 
-  const getContent = useCallback((id: string) => {
-    return contents.get(id);
-  }, [contents]);
-
-  const updateContent = useCallback((id: string, updates: Partial<RegisteredContent>) => {
+  const updatePosition = useCallback((id: string, updates: Partial<RegisteredContent>) => {
     setContents(prev => {
       const item = prev.get(id);
       if (!item) return prev;
@@ -220,26 +200,25 @@ export function DetachedContentProvider({ children }: { children: ReactNode }) {
     <DetachedContentContext.Provider value={{
       registerContent,
       unregisterContent,
-      updateSlotRect,
       detachContent,
       attachContent,
       isDetached,
-      getContent
+      updatePosition,
     }}>
       {children}
-      <ContentRenderer contents={contents} updateContent={updateContent} attachContent={attachContent} />
+      <FloatingContentRenderer contents={contents} updatePosition={updatePosition} attachContent={attachContent} />
     </DetachedContentContext.Provider>
   );
 }
 
-// Renders all content via portal - both inline and floating
-function ContentRenderer({
+// Renders ONLY detached/floating content via portal
+function FloatingContentRenderer({
   contents,
-  updateContent,
+  updatePosition,
   attachContent,
 }: {
   contents: Map<string, RegisteredContent>;
-  updateContent: (id: string, updates: Partial<RegisteredContent>) => void;
+  updatePosition: (id: string, updates: Partial<RegisteredContent>) => void;
   attachContent: (id: string) => void;
 }) {
   const [mounted, setMounted] = useState(false);
@@ -250,13 +229,17 @@ function ContentRenderer({
 
   if (!mounted) return null;
 
+  // Only render detached items
+  const detachedItems = Array.from(contents.values()).filter(item => item.isDetached);
+  if (detachedItems.length === 0) return null;
+
   return createPortal(
     <>
-      {Array.from(contents.values()).map((item) => (
-        <ContentItem
+      {detachedItems.map((item) => (
+        <FloatingWindow
           key={item.id}
           item={item}
-          updateContent={updateContent}
+          updatePosition={updatePosition}
           attachContent={attachContent}
         />
       ))}
@@ -265,40 +248,40 @@ function ContentRenderer({
   );
 }
 
-// Single content item - renders either inline (positioned over slot) or floating
-function ContentItem({
+// Floating window with Rnd for drag/resize
+function FloatingWindow({
   item,
-  updateContent,
+  updatePosition,
   attachContent,
 }: {
   item: RegisteredContent;
-  updateContent: (id: string, updates: Partial<RegisteredContent>) => void;
+  updatePosition: (id: string, updates: Partial<RegisteredContent>) => void;
   attachContent: (id: string) => void;
 }) {
   const bringToFront = useCallback(() => {
-    updateContent(item.id, { zIndex: getNextZIndex() });
-  }, [item.id, updateContent]);
+    updatePosition(item.id, { zIndex: getNextZIndex() });
+  }, [item.id, updatePosition]);
 
   const handleMaximize = useCallback(() => {
     if (!item.isMaximized) {
-      updateContent(item.id, {
+      updatePosition(item.id, {
         preMaximizeState: { position: item.position, size: item.size },
         position: { x: 0, y: 0 },
         size: { width: window.innerWidth, height: window.innerHeight },
         isMaximized: true,
       });
     }
-  }, [item, updateContent]);
+  }, [item, updatePosition]);
 
   const handleRestore = useCallback(() => {
     if (item.isMaximized && item.preMaximizeState) {
-      updateContent(item.id, {
+      updatePosition(item.id, {
         position: item.preMaximizeState.position,
         size: item.preMaximizeState.size,
         isMaximized: false,
       });
     }
-  }, [item, updateContent]);
+  }, [item, updatePosition]);
 
   const handleAttach = useCallback(() => {
     attachContent(item.id);
@@ -309,32 +292,9 @@ function ContentItem({
     borderColor: item.frameStyle?.borderColor,
     borderWidth: item.frameStyle?.borderWidth,
     borderRadius: item.frameStyle?.borderRadius,
-    boxShadow: item.isDetached ? (item.frameStyle?.boxShadow || "0 25px 50px -12px rgba(0, 0, 0, 0.5)") : undefined,
+    boxShadow: item.frameStyle?.boxShadow || "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
   };
 
-  // If no slot rect and not detached, don't render
-  if (!item.slotRect && !item.isDetached) return null;
-
-  // INLINE MODE: Position over the slot
-  if (!item.isDetached && item.slotRect) {
-    return (
-      <div
-        style={{
-          position: 'fixed',
-          top: item.slotRect.top,
-          left: item.slotRect.left,
-          width: item.slotRect.width,
-          height: item.slotRect.height,
-          zIndex: 1, // Low z-index for inline
-          pointerEvents: 'auto',
-        }}
-      >
-        {item.content}
-      </div>
-    );
-  }
-
-  // FLOATING MODE: Use Rnd for drag/resize
   return (
     <div
       style={{
@@ -353,12 +313,12 @@ function ContentItem({
         lockAspectRatio={item.aspectRatio}
         onDragStart={bringToFront}
         onDragStop={(_, d) => {
-          if (!item.isMaximized) updateContent(item.id, { position: { x: d.x, y: d.y } });
+          if (!item.isMaximized) updatePosition(item.id, { position: { x: d.x, y: d.y } });
         }}
         onResizeStart={bringToFront}
         onResizeStop={(_, __, ref, ___, pos) => {
           if (!item.isMaximized) {
-            updateContent(item.id, {
+            updatePosition(item.id, {
               size: { width: ref.offsetWidth, height: ref.offsetHeight },
               position: pos,
             });
@@ -442,11 +402,11 @@ export function DetachableContent({
   lockAspectRatio = false,
 }: DetachableContentProps) {
   const context = useDetachedContent();
-  const slotRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const hasRegisteredRef = useRef(false);
 
   // Check if this content is detached (managed by provider)
   const isDetachedInProvider = context?.isDetached(id) ?? false;
-  const registeredContent = context?.getContent(id);
 
   const buttonPositionClasses = {
     "top-right": "top-2 right-2",
@@ -455,39 +415,26 @@ export function DetachableContent({
     "bottom-left": "bottom-2 left-2",
   };
 
-  // Register content with provider on mount
+  // Register content with provider on mount - only ONCE per id
   useEffect(() => {
-    if (!context) return;
-    context.registerContent(id, children, { title, headerStyle, frameStyle, lockAspectRatio });
-    return () => context.unregisterContent(id);
-  }, [context, id, children, title, headerStyle, frameStyle, lockAspectRatio]);
+    if (!context || !containerRef.current || hasRegisteredRef.current) return;
 
-  // Update slot rect when slot element changes or on scroll/resize
-  useEffect(() => {
-    if (!context || !slotRef.current) return;
-
-    const updateRect = () => {
-      if (slotRef.current) {
-        context.updateSlotRect(id, slotRef.current.getBoundingClientRect());
-      }
-    };
-
-    updateRect();
-
-    // Update on scroll and resize
-    window.addEventListener('scroll', updateRect, true);
-    window.addEventListener('resize', updateRect);
-
-    // Also use ResizeObserver for layout changes
-    const resizeObserver = new ResizeObserver(updateRect);
-    resizeObserver.observe(slotRef.current);
+    const rect = containerRef.current.getBoundingClientRect();
+    context.registerContent(id, children, {
+      title,
+      headerStyle,
+      frameStyle,
+      lockAspectRatio,
+      initialRect: rect,
+    });
+    hasRegisteredRef.current = true;
 
     return () => {
-      window.removeEventListener('scroll', updateRect, true);
-      window.removeEventListener('resize', updateRect);
-      resizeObserver.disconnect();
+      context.unregisterContent(id);
+      hasRegisteredRef.current = false;
     };
-  }, [context, id, isDetachedInProvider]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [context, id]); // Only depend on context and id - content is registered ONCE
 
   const handleDetach = useCallback(() => {
     context?.detachContent(id);
@@ -497,81 +444,66 @@ export function DetachableContent({
     context?.attachContent(id);
   }, [context, id]);
 
-  // If not using provider, show warning
-  if (!context) {
+  // If detached in provider, show placeholder
+  if (isDetachedInProvider) {
     return (
-      <div className={cn("relative group", className)}>
-        {children}
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white text-sm">
-          Wrap with DetachedContentProvider
-        </div>
+      <div
+        className={cn(
+          "rounded-lg border-2 border-dashed border-slate-600",
+          "bg-slate-800/30 flex items-center justify-center",
+          "aspect-video",
+          placeholderClassName,
+          className
+        )}
+      >
+        <button
+          onClick={handleAttach}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
+        >
+          <Minimize2 className="w-4 h-4" />
+          Restore here
+        </button>
       </div>
     );
   }
 
+  // Inline mode - render children directly with CSS-only approach
   return (
     <>
-      {/* Placeholder when detached - reserves space in document flow */}
-      {isDetachedInProvider && registeredContent?.slotRect && (
-        <div
-          style={{ width: registeredContent.slotRect.width, height: registeredContent.slotRect.height }}
+      <div ref={containerRef} className={cn("relative group", className)}>
+        {children}
+
+        {/* Detach button (inside/overlay) */}
+        {detachButtonStyle === "inside" && (
+          <button
+            onClick={handleDetach}
+            className={cn(
+              "absolute opacity-0 group-hover:opacity-100 z-10",
+              "p-2 rounded-lg bg-black/70 text-white",
+              "hover:bg-black/90 transition-all duration-200",
+              "backdrop-blur-sm",
+              buttonPositionClasses[detachButtonPosition]
+            )}
+            title="Pop out to floating window"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
+      {/* Detach button (outside) - below content, small and subtle */}
+      {detachButtonStyle === "outside" && (
+        <button
+          onClick={handleDetach}
           className={cn(
-            "rounded-lg border-2 border-dashed border-slate-600",
-            "bg-slate-800/30 flex items-center justify-center",
-            placeholderClassName
+            "flex items-center justify-center gap-1.5 mt-2 py-1 px-3",
+            "rounded-md bg-slate-700/80 hover:bg-slate-600 text-white/80 hover:text-white text-xs",
+            "transition-colors duration-200"
           )}
         >
-          <button
-            onClick={handleAttach}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
-          >
-            <Minimize2 className="w-4 h-4" />
-            Restore here
-          </button>
-        </div>
-      )}
-
-      {/* Slot - invisible element that marks where inline content should appear */}
-      {/* Content is rendered via portal but positioned over this slot */}
-      {!isDetachedInProvider && (
-        <>
-          <div ref={slotRef} className={cn("relative group", className)}>
-            {/* Invisible placeholder to maintain size - actual content rendered via portal */}
-            <div className="invisible">{children}</div>
-
-            {/* Detach button (inside/overlay) */}
-            {detachButtonStyle === "inside" && (
-              <button
-                onClick={handleDetach}
-                className={cn(
-                  "absolute opacity-0 group-hover:opacity-100 z-10",
-                  "p-2 rounded-lg bg-black/70 text-white",
-                  "hover:bg-black/90 transition-all duration-200",
-                  "backdrop-blur-sm",
-                  buttonPositionClasses[detachButtonPosition]
-                )}
-                title="Pop out to floating window"
-              >
-                <ExternalLink className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-
-          {/* Detach button (outside) - below content, small and subtle */}
-          {detachButtonStyle === "outside" && (
-            <button
-              onClick={handleDetach}
-              className={cn(
-                "flex items-center justify-center gap-1.5 mt-2 py-1 px-3",
-                "rounded-md bg-slate-700/80 hover:bg-slate-600 text-white/80 hover:text-white text-xs",
-                "transition-colors duration-200"
-              )}
-            >
-              <ExternalLink className="w-3 h-3" />
-              Pop out
-            </button>
-          )}
-        </>
+          <ExternalLink className="w-3 h-3" />
+          Pop out
+        </button>
       )}
     </>
   );
