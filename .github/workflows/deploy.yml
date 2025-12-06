@@ -1,7 +1,7 @@
 # GitHub Actions workflow for building and deploying Next.js to GitHub Pages
 #
 # This workflow:
-# 1. Triggers on push to main branch or manual dispatch
+# 1. Triggers after release workflow completes or on manual dispatch
 # 2. Installs dependencies using pnpm
 # 3. Builds the Next.js application with static export
 # 4. Deploys the output to GitHub Pages
@@ -13,9 +13,12 @@
 name: Deploy to GitHub Pages
 
 on:
-  # Runs on pushes targeting the default branch
-  push:
-    branches: ["main"]
+  # Runs after release workflow completes
+  workflow_run:
+    workflows: ["Release"]
+    types:
+      - completed
+    branches: [main]
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -36,6 +39,8 @@ jobs:
   # Build job
   build:
     runs-on: ubuntu-latest
+    # Only run if release was successful (or manual trigger)
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
