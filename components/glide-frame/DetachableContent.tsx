@@ -4,8 +4,9 @@ import { useState, useRef, useCallback, ReactNode, useEffect, useSyncExternalSto
 import { Rnd } from "react-rnd";
 import { ExternalLink, Minimize2, ChevronLeft, ChevronRight } from "lucide-react";
 import { GlideFrameHeader } from "./GlideFrameHeader";
-import { HeaderStyleOptions, FrameStyleOptions, DockSide, DOCKED_HANDLE_WIDTH, DOCKED_HEIGHT, MOMENTUM_FRICTION, MOMENTUM_MIN_VELOCITY, MOMENTUM_MULTIPLIER, DOCK_MIN_VELOCITY } from "./types";
+import { HeaderStyleOptions, FrameStyleOptions, DOCKED_HANDLE_WIDTH, DOCKED_HEIGHT, MOMENTUM_FRICTION, MOMENTUM_MIN_VELOCITY, MOMENTUM_MULTIPLIER, DOCK_MIN_VELOCITY, Size } from "./types";
 import { cn } from "@/lib/utils";
+import { useDetachableContext } from "./GlideFrameProvider";
 
 // Global z-index manager for focus
 let globalZIndex = 10000;
@@ -73,12 +74,14 @@ interface DetachableContentProps {
   placeholderClassName?: string;
   /** Lock aspect ratio during resize */
   lockAspectRatio?: boolean;
+  /** Default size for floating window */
+  defaultSize?: Size;
 }
 
 const DEFAULT_HEADER_HEIGHT = 44;
 
 export function DetachableContent({
-  id: _id, // Reserved for future use
+  id,
   title,
   children,
   headerStyle,
@@ -87,7 +90,207 @@ export function DetachableContent({
   className,
   placeholderClassName,
   lockAspectRatio = false,
+  defaultSize,
 }: DetachableContentProps) {
+  const context = useDetachableContext();
+
+  // If provider exists, use provider-based rendering (navigation persistence)
+  if (context) {
+    return (
+      <DetachableContentWithProvider
+        id={id}
+        title={title}
+        headerStyle={headerStyle}
+        frameStyle={frameStyle}
+        detachButtonPosition={detachButtonPosition}
+        className={className}
+        placeholderClassName={placeholderClassName}
+        lockAspectRatio={lockAspectRatio}
+        defaultSize={defaultSize}
+        context={context}
+      >
+        {children}
+      </DetachableContentWithProvider>
+    );
+  }
+
+  // Fallback: standalone mode (no navigation persistence)
+  return (
+    <DetachableContentStandalone
+      id={id}
+      title={title}
+      headerStyle={headerStyle}
+      frameStyle={frameStyle}
+      detachButtonPosition={detachButtonPosition}
+      className={className}
+      placeholderClassName={placeholderClassName}
+      lockAspectRatio={lockAspectRatio}
+    >
+      {children}
+    </DetachableContentStandalone>
+  );
+}
+
+// Provider-based implementation
+interface DetachableContextType {
+  register: (id: string, content: ReactNode, options: {
+    title: string;
+    headerStyle?: HeaderStyleOptions;
+    frameStyle?: FrameStyleOptions;
+    lockAspectRatio?: boolean;
+    defaultSize?: Size;
+  }) => void;
+  unregister: (id: string) => void;
+  updateSlot: (id: string, rect: DOMRect | null) => void;
+  detach: (id: string) => void;
+  attach: (id: string) => void;
+  isDetached: (id: string) => boolean;
+  isDocked: (id: string) => boolean;
+  isRegistered: (id: string) => boolean;
+}
+
+function DetachableContentWithProvider({
+  id,
+  title,
+  children,
+  headerStyle,
+  frameStyle,
+  detachButtonPosition,
+  className,
+  placeholderClassName,
+  lockAspectRatio,
+  defaultSize,
+  context,
+}: DetachableContentProps & { context: DetachableContextType }) {
+  const slotRef = useRef<HTMLDivElement>(null);
+  const hasRegistered = useRef(false);
+  const contextRef = useRef(context);
+  contextRef.current = context;
+
+  // Register ONCE on mount
+  useEffect(() => {
+    if (!hasRegistered.current) {
+      contextRef.current.register(id, children, {
+        title,
+        headerStyle,
+        frameStyle,
+        lockAspectRatio: lockAspectRatio ?? false,
+        defaultSize,
+      });
+      hasRegistered.current = true;
+    }
+
+    return () => {
+      // Only unregister if not detached/docked
+      if (!contextRef.current.isDetached(id) && !contextRef.current.isDocked(id)) {
+        contextRef.current.unregister(id);
+        hasRegistered.current = false;
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  // Track slot position
+  useEffect(() => {
+    const slot = slotRef.current;
+    if (!slot) return;
+
+    const updateRect = () => {
+      const rect = slot.getBoundingClientRect();
+      contextRef.current.updateSlot(id, rect);
+    };
+
+    updateRect();
+
+    const handleUpdate = () => requestAnimationFrame(updateRect);
+    window.addEventListener('scroll', handleUpdate, true);
+    window.addEventListener('resize', handleUpdate);
+
+    const observer = new ResizeObserver(handleUpdate);
+    observer.observe(slot);
+
+    return () => {
+      window.removeEventListener('scroll', handleUpdate, true);
+      window.removeEventListener('resize', handleUpdate);
+      observer.disconnect();
+      contextRef.current.updateSlot(id, null);
+    };
+  }, [id]);
+
+  const isDetached = context.isDetached(id);
+  const isDocked = context.isDocked(id);
+
+  const buttonPositionClasses = {
+    "top-right": "top-2 right-2",
+    "top-left": "top-2 left-2",
+    "bottom-right": "bottom-2 right-2",
+    "bottom-left": "bottom-2 left-2",
+  };
+
+  const handleDetach = useCallback(() => contextRef.current.detach(id), [id]);
+  const handleAttach = useCallback(() => contextRef.current.attach(id), [id]);
+
+  // When detached/docked, show placeholder
+  if (isDetached || isDocked) {
+    return (
+      <div
+        ref={slotRef}
+        className={cn(
+          "rounded-lg border-2 border-dashed border-slate-600",
+          "bg-slate-800/30 flex items-center justify-center min-h-[200px]",
+          placeholderClassName,
+          className
+        )}
+      >
+        <button
+          onClick={handleAttach}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
+        >
+          <Minimize2 className="w-4 h-4" />
+          Restore here
+        </button>
+      </div>
+    );
+  }
+
+  // Inline mode - slot with detach button (content rendered by provider)
+  return (
+    <div ref={slotRef} className={cn("relative group", className)}>
+      {/* Invisible placeholder for size - actual content rendered by provider portal */}
+      <div style={{ visibility: 'hidden' }}>
+        {children}
+      </div>
+
+      {/* Detach button */}
+      <button
+        onClick={handleDetach}
+        className={cn(
+          "absolute opacity-0 group-hover:opacity-100 z-10",
+          "p-2 rounded-lg bg-black/70 text-white",
+          "hover:bg-black/90 transition-all duration-200",
+          "backdrop-blur-sm",
+          buttonPositionClasses[detachButtonPosition!]
+        )}
+        title="Pop out to floating window"
+      >
+        <ExternalLink className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
+// Standalone implementation (no provider, no navigation persistence)
+function DetachableContentStandalone({
+  id: _id,
+  title,
+  children,
+  headerStyle,
+  frameStyle,
+  detachButtonPosition = "top-right",
+  className,
+  placeholderClassName,
+  lockAspectRatio = false,
+}: Omit<DetachableContentProps, 'defaultSize'>) {
   const [isDetached, setIsDetached] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const [isDocked, setIsDocked] = useState(false);
