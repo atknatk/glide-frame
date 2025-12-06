@@ -1,6 +1,6 @@
 {
   "name": "glide-frame",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "description": "iOS-style draggable, resizable floating container for React & Next.js. YouTube mini-player inspired picture-in-picture component with momentum physics, dock-to-edge, and glassmorphism styling.",
   "author": "atknatk",
   "license": "MIT",

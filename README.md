@@ -22,6 +22,7 @@ A YouTube mini-player inspired **draggable and resizable floating container** co
 - 🌙 **Dark Mode** - Full support for light/dark themes via shadcn/ui
 - ⚡ **60 FPS** - Hardware-accelerated animations for smooth performance
 - 🔧 **Fully Typed** - Complete TypeScript support with exported types
+- 🎥 **Stateful Detach** - Pop-out iframe/video without reloading (preserves state)
 
 ## 📦 Installation
 
@@ -221,6 +222,46 @@ interface GlideFrameState {
 </GlideFrame>
 ```
 
+### DetachableContent - Stateful Pop-out
+
+Convert any inline content (iframe, video, component) to a floating window **without losing state**:
+
+```tsx
+import { DetachableContent } from "@/components/glide-frame";
+
+function Page() {
+  return (
+    <DetachableContent
+      id="video-player"
+      title="YouTube Video"
+      headerStyle={{ backgroundColor: "#dc2626", buttonColor: "#fff" }}
+      frameStyle={{ borderRadius: 12, borderColor: "#dc2626", borderWidth: 2 }}
+    >
+      {/* iframe won't reload when detached! */}
+      <iframe
+        src="https://www.youtube.com/embed/dQw4w9WgXcQ"
+        className="w-full aspect-video"
+        allowFullScreen
+      />
+    </DetachableContent>
+  );
+}
+```
+
+**How it works:**
+
+- Hover over content → pop-out button appears
+- Click pop-out → content floats without reloading
+- Placeholder shows where content was
+- Click "Restore here" or close → content returns to original position
+
+This is perfect for:
+
+- 🎥 Video players that shouldn't restart
+- 🎮 Games with state (canvas, WebGL)
+- 📊 Live dashboards with WebSocket connections
+- 📝 Forms with user input
+
 ### Momentum Physics
 
 Adjust the physics constants in `types.ts`:
@@ -239,6 +280,7 @@ components/glide-frame/
 ├── GlideFrame.tsx          # Main component with react-rnd integration
 ├── GlideFrameHeader.tsx    # Header bar with control buttons
 ├── GlideFrameProvider.tsx  # Context provider for persistent frames
+├── DetachableContent.tsx   # Stateful pop-out wrapper (preserves iframe state)
 ├── types.ts                # TypeScript interfaces and constants
 ├── index.ts                # Public exports
 └── hooks/
