@@ -89,6 +89,53 @@ export function useDetachableContext() {
   return useContext(DetachableContext);
 }
 
+/**
+ * Hook to control a specific detachable content from anywhere in the app.
+ * Must be used within GlideFrameProvider.
+ *
+ * @example
+ * ```tsx
+ * const { detach, attach, isDetached, isDocked } = useDetachable('youtube-player');
+ *
+ * <button onClick={detach}>Pop out</button>
+ * <DetachableContent id="youtube-player" showDetachButton={false}>
+ *   <iframe ... />
+ * </DetachableContent>
+ * ```
+ */
+export function useDetachable(id: string) {
+  const context = useContext(DetachableContext);
+
+  const detach = useCallback(() => {
+    context?.detach(id);
+  }, [context, id]);
+
+  const attach = useCallback(() => {
+    context?.attach(id);
+  }, [context, id]);
+
+  const isDetached = context?.isDetached(id) ?? false;
+  const isDocked = context?.isDocked(id) ?? false;
+  const isRegistered = context?.isRegistered(id) ?? false;
+
+  return {
+    /** Detach content to floating window */
+    detach,
+    /** Attach content back to its original slot */
+    attach,
+    /** Toggle between detached and attached */
+    toggle: isDetached || isDocked ? attach : detach,
+    /** Whether content is currently detached (floating) */
+    isDetached,
+    /** Whether content is currently docked (minimized to edge) */
+    isDocked,
+    /** Whether content is registered in provider */
+    isRegistered,
+    /** Whether content is floating (detached or docked) */
+    isFloating: isDetached || isDocked,
+  };
+}
+
 interface GlideFrameProviderProps {
   children: ReactNode;
 }

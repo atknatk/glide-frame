@@ -76,6 +76,10 @@ interface DetachableContentProps {
   lockAspectRatio?: boolean;
   /** Default size for floating window */
   defaultSize?: Size;
+  /** Show built-in detach button. Set to false if using useDetachable() hook for custom trigger */
+  showDetachButton?: boolean;
+  /** Show restore button in placeholder when detached */
+  showRestoreButton?: boolean;
 }
 
 const DEFAULT_HEADER_HEIGHT = 44;
@@ -91,6 +95,8 @@ export function DetachableContent({
   placeholderClassName,
   lockAspectRatio = false,
   defaultSize,
+  showDetachButton = true,
+  showRestoreButton = true,
 }: DetachableContentProps) {
   const context = useDetachableContext();
 
@@ -107,6 +113,8 @@ export function DetachableContent({
         placeholderClassName={placeholderClassName}
         lockAspectRatio={lockAspectRatio}
         defaultSize={defaultSize}
+        showDetachButton={showDetachButton}
+        showRestoreButton={showRestoreButton}
         context={context}
       >
         {children}
@@ -125,6 +133,8 @@ export function DetachableContent({
       className={className}
       placeholderClassName={placeholderClassName}
       lockAspectRatio={lockAspectRatio}
+      showDetachButton={showDetachButton}
+      showRestoreButton={showRestoreButton}
     >
       {children}
     </DetachableContentStandalone>
@@ -160,6 +170,8 @@ function DetachableContentWithProvider({
   placeholderClassName,
   lockAspectRatio,
   defaultSize,
+  showDetachButton,
+  showRestoreButton,
   context,
 }: DetachableContentProps & { context: DetachableContextType }) {
   const slotRef = useRef<HTMLDivElement>(null);
@@ -242,13 +254,15 @@ function DetachableContentWithProvider({
           className
         )}
       >
-        <button
-          onClick={handleAttach}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
-        >
-          <Minimize2 className="w-4 h-4" />
-          Restore here
-        </button>
+        {showRestoreButton && (
+          <button
+            onClick={handleAttach}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
+          >
+            <Minimize2 className="w-4 h-4" />
+            Restore here
+          </button>
+        )}
       </div>
     );
   }
@@ -262,19 +276,21 @@ function DetachableContentWithProvider({
       </div>
 
       {/* Detach button */}
-      <button
-        onClick={handleDetach}
-        className={cn(
-          "absolute opacity-0 group-hover:opacity-100 z-10",
-          "p-2 rounded-lg bg-black/70 text-white",
-          "hover:bg-black/90 transition-all duration-200",
-          "backdrop-blur-sm",
-          buttonPositionClasses[detachButtonPosition!]
-        )}
-        title="Pop out to floating window"
-      >
-        <ExternalLink className="w-4 h-4" />
-      </button>
+      {showDetachButton && (
+        <button
+          onClick={handleDetach}
+          className={cn(
+            "absolute opacity-0 group-hover:opacity-100 z-10",
+            "p-2 rounded-lg bg-black/70 text-white",
+            "hover:bg-black/90 transition-all duration-200",
+            "backdrop-blur-sm",
+            buttonPositionClasses[detachButtonPosition!]
+          )}
+          title="Pop out to floating window"
+        >
+          <ExternalLink className="w-4 h-4" />
+        </button>
+      )}
     </div>
   );
 }
@@ -290,7 +306,10 @@ function DetachableContentStandalone({
   className,
   placeholderClassName,
   lockAspectRatio = false,
+  showDetachButton = true,
+  showRestoreButton = true,
 }: Omit<DetachableContentProps, 'defaultSize'>) {
+  void _id; // Reserved for future use
   const [isDetached, setIsDetached] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const [isDocked, setIsDocked] = useState(false);
@@ -567,13 +586,15 @@ function DetachableContentStandalone({
               placeholderClassName
             )}
           >
-            <button
-              onClick={handleAttach}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
-            >
-              <Minimize2 className="w-4 h-4" />
-              Restore here
-            </button>
+            {showRestoreButton && (
+              <button
+                onClick={handleAttach}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
+              >
+                <Minimize2 className="w-4 h-4" />
+                Restore here
+              </button>
+            )}
           </div>
         )}
 
@@ -635,13 +656,15 @@ function DetachableContentStandalone({
             placeholderClassName
           )}
         >
-          <button
-            onClick={handleAttach}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
-          >
-            <Minimize2 className="w-4 h-4" />
-            Restore here
-          </button>
+          {showRestoreButton && (
+            <button
+              onClick={handleAttach}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
+            >
+              <Minimize2 className="w-4 h-4" />
+              Restore here
+            </button>
+          )}
         </div>
       )}
 
@@ -724,7 +747,7 @@ function DetachableContentStandalone({
         </Rnd>
 
         {/* Detach button - only visible when inline */}
-        {!isDetached && (
+        {!isDetached && showDetachButton && (
           <button
             onClick={handleDetach}
             className={cn(
