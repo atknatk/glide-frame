@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, ReactNode, useEffect, useSyncExternalStore } from "react";
+import { useState, useRef, useCallback, ReactNode, useEffect, useSyncExternalStore, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import { Rnd } from "react-rnd";
 import { ExternalLink, Minimize2 } from "lucide-react";
@@ -95,6 +95,7 @@ export function DetachableContent({
   const contentRef = useRef<HTMLDivElement>(null);
   const contentWrapperRef = useRef<HTMLDivElement>(null);
   const floatingContentRef = useRef<HTMLDivElement>(null);
+  const inlineSlotRef = useRef<HTMLDivElement>(null);
 
   const [originalRect, setOriginalRect] = useState<DOMRect | null>(null);
   const [position, setPosition] = useState({ x: 100, y: 100 });
@@ -188,7 +189,25 @@ export function DetachableContent({
     boxShadow: frameStyle?.boxShadow || "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
   };
 
-  // Floating frame rendered via portal - always mounted to preserve state
+  // Move content DOM node between inline and floating containers
+  useLayoutEffect(() => {
+    const contentNode = contentWrapperRef.current;
+    if (!contentNode) return;
+
+    if (isDetached && floatingContentRef.current) {
+      // Move to floating container
+      if (!floatingContentRef.current.contains(contentNode)) {
+        floatingContentRef.current.appendChild(contentNode);
+      }
+    } else if (!isDetached && inlineSlotRef.current) {
+      // Move to inline container
+      if (!inlineSlotRef.current.contains(contentNode)) {
+        inlineSlotRef.current.appendChild(contentNode);
+      }
+    }
+  }, [isDetached, mounted]);
+
+  // Floating frame rendered via portal
   const floatingFrame = mounted && createPortal(
     <div
       style={{
@@ -253,8 +272,8 @@ export function DetachableContent({
             />
           </div>
 
-          {/* Content */}
-          <div className="flex-1 overflow-hidden">{children}</div>
+          {/* Content slot - content moved here via DOM when detached */}
+          <div ref={floatingContentRef} className="flex-1 overflow-hidden" />
         </div>
       </Rnd>
     </div>,
@@ -263,13 +282,19 @@ export function DetachableContent({
 
   return (
     <>
-      {/* Inline container - hidden when detached */}
+      {/* Content wrapper - rendered once, moved between containers via DOM */}
+      <div ref={contentWrapperRef} className="h-full w-full">
+        {children}
+      </div>
+
+      {/* Inline container - visible when not detached */}
       <div
         ref={contentRef}
         className={cn("relative group", className)}
         style={{ display: isDetached ? 'none' : undefined }}
       >
-        {children}
+        {/* Slot for content - content moved here via DOM when inline */}
+        <div ref={inlineSlotRef} className="h-full w-full" />
         <button
           onClick={handleDetach}
           className={cn(
