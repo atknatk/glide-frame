@@ -468,17 +468,21 @@ function DetachableContentWithProvider({
   const slotRef = useRef<HTMLDivElement>(null);
   const hasRegistered = useRef(false);
 
+  // Store context in ref to avoid effect re-runs
+  const contextRef = useRef(context);
+  contextRef.current = context;
+
   // Register ONCE on first mount - content stored, never updated
   useEffect(() => {
     if (!hasRegistered.current) {
-      context.register(id, children, { title, headerStyle, frameStyle, lockAspectRatio: lockAspectRatio ?? false });
+      contextRef.current.register(id, children, { title, headerStyle, frameStyle, lockAspectRatio: lockAspectRatio ?? false });
       hasRegistered.current = true;
     }
 
     return () => {
       // Only unregister if not detached
-      if (!context.isDetached(id)) {
-        context.unregister(id);
+      if (!contextRef.current.isDetached(id)) {
+        contextRef.current.unregister(id);
         hasRegistered.current = false;
       }
     };
@@ -492,7 +496,7 @@ function DetachableContentWithProvider({
 
     const updateRect = () => {
       const rect = slot.getBoundingClientRect();
-      context.updateSlot(id, rect);
+      contextRef.current.updateSlot(id, rect);
     };
 
     updateRect();
@@ -509,9 +513,9 @@ function DetachableContentWithProvider({
       window.removeEventListener('scroll', handleUpdate, true);
       window.removeEventListener('resize', handleUpdate);
       observer.disconnect();
-      context.updateSlot(id, null);
+      contextRef.current.updateSlot(id, null);
     };
-  }, [id, context]);
+  }, [id]); // Removed context dependency - using ref
 
   const isDetached = context.isDetached(id);
 
@@ -522,8 +526,8 @@ function DetachableContentWithProvider({
     "bottom-left": "bottom-2 left-2",
   };
 
-  const handleDetach = useCallback(() => context.detach(id), [context, id]);
-  const handleAttach = useCallback(() => context.attach(id), [context, id]);
+  const handleDetach = useCallback(() => contextRef.current.detach(id), [id]);
+  const handleAttach = useCallback(() => contextRef.current.attach(id), [id]);
 
   return (
     <>
