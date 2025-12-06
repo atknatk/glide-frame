@@ -220,7 +220,8 @@ export default function Home() {
               id="demo-component-1"
               title="Interactive Counter"
               headerStyle={{ backgroundColor: "#7c3aed", textColor: "#fff", buttonColor: "#fff" }}
-              frameStyle={{ borderRadius: 12, borderColor: "#7c3aed", borderWidth: 2 }}
+              frameStyle={{ borderRadius: 12, borderColor: "#7c3aed", borderWidth: 2, backgroundColor: "#ec4899" }}
+              lockAspectRatio
             >
               <InteractiveCounter />
             </DetachableContent>
