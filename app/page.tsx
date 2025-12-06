@@ -1,7 +1,7 @@
 "use client";
 
-import { useSyncExternalStore, useState } from "react";
-import { useGlideFrameContext, DetachableContent } from "@/components/glide-frame";
+import { useSyncExternalStore } from "react";
+import { useGlideFrameContext, DetachableContent, useDetachableState } from "@/components/glide-frame";
 import { Play, Video, Gamepad2, Layout, Package } from "lucide-react";
 
 const MOBILE_BREAKPOINT = 768;
@@ -31,7 +31,8 @@ function DemoContent({ title, color }: { title: string; color: string }) {
 }
 
 function InteractiveCounter() {
-  const [count, setCount] = useState(0);
+  // useDetachableState preserves state across detach/attach cycles
+  const [count, setCount] = useDetachableState("demo-counter-1", 0);
 
   return (
     <div className="aspect-video bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">

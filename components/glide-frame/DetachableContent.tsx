@@ -1,11 +1,36 @@
 "use client";
 
-import { useState, useRef, useCallback, useLayoutEffect, ReactNode } from "react";
+import { useState, useRef, useCallback, ReactNode, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { Rnd } from "react-rnd";
 import { ExternalLink, Minimize2 } from "lucide-react";
 import { GlideFrameHeader } from "./GlideFrameHeader";
 import { HeaderStyleOptions, FrameStyleOptions } from "./types";
 import { cn } from "@/lib/utils";
+
+// Global z-index manager for focus
+let globalZIndex = 10000;
+const getNextZIndex = () => ++globalZIndex;
+
+// Global state store for detachable content
+const detachableStateStore = new Map<string, unknown>();
+
+export function useDetachableState<T>(id: string, initialValue: T): [T, (value: T | ((prev: T) => T)) => void] {
+  const [value, setValue] = useState<T>(() => {
+    const stored = detachableStateStore.get(id);
+    return stored !== undefined ? (stored as T) : initialValue;
+  });
+
+  const setValueAndStore = useCallback((newValue: T | ((prev: T) => T)) => {
+    setValue(prev => {
+      const resolved = typeof newValue === 'function' ? (newValue as (prev: T) => T)(prev) : newValue;
+      detachableStateStore.set(id, resolved);
+      return resolved;
+    });
+  }, [id]);
+
+  return [value, setValueAndStore];
+}
 
 interface DetachableContentProps {
   /** Unique identifier */
@@ -45,17 +70,31 @@ export function DetachableContent({
   const [isMaximized, setIsMaximized] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const contentWrapperRef = useRef<HTMLDivElement>(null);
+  const floatingContentRef = useRef<HTMLDivElement>(null);
 
   const [originalRect, setOriginalRect] = useState<DOMRect | null>(null);
   const [position, setPosition] = useState({ x: 100, y: 100 });
   const [size, setSize] = useState({ width: 480, height: 320 });
   const [aspectRatio, setAspectRatio] = useState<number | false>(false);
+  const [zIndex, setZIndex] = useState(10000);
+  const [mounted, setMounted] = useState(false);
   const [preMaximizeState, setPreMaximizeState] = useState<{
     position: { x: number; y: number };
     size: { width: number; height: number };
   } | null>(null);
 
   const headerHeight = headerStyle?.height || DEFAULT_HEADER_HEIGHT;
+
+  // Client-side mount check for portal
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Bring to front on focus/click
+  const bringToFront = useCallback(() => {
+    setZIndex(getNextZIndex());
+  }, []);
 
   const handleDetach = useCallback(() => {
     if (contentRef.current) {
@@ -126,10 +165,76 @@ export function DetachableContent({
     boxShadow: frameStyle?.boxShadow || "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
   };
 
-  if (!isDetached) {
-    // Inline mode - content with detach button
-    return (
-      <div ref={contentRef} className={cn("relative group", className)}>
+  // Floating frame rendered via portal - always mounted to preserve state
+  const floatingFrame = mounted && createPortal(
+    <div style={{ display: isDetached ? 'block' : 'none' }}>
+      <Rnd
+        position={position}
+        size={size}
+        lockAspectRatio={aspectRatio}
+        onDragStart={bringToFront}
+        onDragStop={(_, d) => {
+          if (!isMaximized) setPosition({ x: d.x, y: d.y });
+        }}
+        onResizeStart={bringToFront}
+        onResizeStop={(_, __, ref, ___, pos) => {
+          if (!isMaximized) {
+            setSize({ width: ref.offsetWidth, height: ref.offsetHeight });
+            setPosition(pos);
+          }
+        }}
+        onMouseDown={bringToFront}
+        minWidth={Math.min(280, typeof window !== "undefined" ? window.innerWidth - 40 : 280)}
+        minHeight={180}
+        bounds="window"
+        dragHandleClassName="detachable-frame-handle"
+        cancel=".glide-frame-button"
+        disableDragging={isMaximized}
+        enableResizing={!isMaximized}
+        style={{ zIndex }}
+      >
+        <div
+          ref={containerRef}
+          style={{
+            ...frameStyles,
+            borderStyle: frameStyle?.borderWidth ? "solid" : undefined,
+          }}
+          className={cn(
+            "h-full flex flex-col overflow-hidden",
+            "border border-border",
+            !frameStyle?.borderRadius && "rounded-lg",
+            frameStyle?.className
+          )}
+        >
+          {/* Header */}
+          <div className="detachable-frame-handle shrink-0">
+            <GlideFrameHeader
+              title={title}
+              isDocked={false}
+              isMaximized={isMaximized}
+              onMaximize={handleMaximize}
+              onRestore={isMaximized ? handleRestore : handleAttach}
+              onClose={handleAttach}
+              styleOptions={headerStyle}
+            />
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-hidden">{children}</div>
+        </div>
+      </Rnd>
+    </div>,
+    document.body
+  );
+
+  return (
+    <>
+      {/* Inline container - hidden when detached */}
+      <div
+        ref={contentRef}
+        className={cn("relative group", className)}
+        style={{ display: isDetached ? 'none' : undefined }}
+      >
         {children}
         <button
           onClick={handleDetach}
@@ -145,14 +250,9 @@ export function DetachableContent({
           <ExternalLink className="w-4 h-4" />
         </button>
       </div>
-    );
-  }
 
-  // Detached/Floating mode
-  return (
-    <>
-      {/* Placeholder to maintain layout */}
-      {originalRect && (
+      {/* Placeholder when detached */}
+      {isDetached && originalRect && (
         <div
           style={{ width: originalRect.width, height: originalRect.height }}
           className={cn(
@@ -171,59 +271,8 @@ export function DetachableContent({
         </div>
       )}
 
-      {/* Floating frame */}
-      <Rnd
-        position={position}
-        size={size}
-        lockAspectRatio={aspectRatio}
-        onDragStop={(_, d) => {
-          if (!isMaximized) setPosition({ x: d.x, y: d.y });
-        }}
-        onResizeStop={(_, __, ref, ___, pos) => {
-          if (!isMaximized) {
-            setSize({ width: ref.offsetWidth, height: ref.offsetHeight });
-            setPosition(pos);
-          }
-        }}
-        minWidth={Math.min(280, typeof window !== "undefined" ? window.innerWidth - 40 : 280)}
-        minHeight={180}
-        bounds="window"
-        dragHandleClassName="detachable-frame-handle"
-        cancel=".glide-frame-button"
-        disableDragging={isMaximized}
-        enableResizing={!isMaximized}
-        style={{ zIndex: 9999 }}
-      >
-        <div
-          ref={containerRef}
-          style={{
-            ...frameStyles,
-            borderStyle: frameStyle?.borderWidth ? "solid" : undefined,
-          }}
-          className={cn(
-            "h-full flex flex-col overflow-hidden",
-            "border border-border",
-            !frameStyle?.borderRadius && "rounded-lg",
-            frameStyle?.className
-          )}
-        >
-          {/* Header */}
-          <div className="detachable-frame-handle flex-shrink-0">
-            <GlideFrameHeader
-              title={title}
-              isDocked={false}
-              isMaximized={isMaximized}
-              onMaximize={handleMaximize}
-              onRestore={isMaximized ? handleRestore : handleAttach}
-              onClose={handleAttach}
-              styleOptions={headerStyle}
-            />
-          </div>
-
-          {/* Content */}
-          <div className="flex-1 overflow-hidden">{children}</div>
-        </div>
-      </Rnd>
+      {/* Floating frame via portal */}
+      {floatingFrame}
     </>
   );
 }
