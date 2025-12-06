@@ -1,31 +1,108 @@
 {
   "name": "glide-frame",
   "version": "0.1.0",
-  "private": true,
+  "description": "iOS-style draggable, resizable floating container for React & Next.js. YouTube mini-player inspired picture-in-picture component with momentum physics, dock-to-edge, and glassmorphism styling.",
+  "author": "atknatk",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/atknatk/glide-frame.git"
+  },
+  "homepage": "https://atknatk.github.io/glide-frame",
+  "bugs": {
+    "url": "https://github.com/atknatk/glide-frame/issues"
+  },
+  "keywords": [
+    "react",
+    "react-component",
+    "nextjs",
+    "next",
+    "draggable",
+    "resizable",
+    "floating",
+    "floating-window",
+    "floating-container",
+    "floating-panel",
+    "mini-player",
+    "miniplayer",
+    "picture-in-picture",
+    "pip",
+    "dock",
+    "dockable",
+    "ios",
+    "ios-style",
+    "momentum",
+    "physics",
+    "touch",
+    "mobile",
+    "responsive",
+    "glassmorphism",
+    "modal",
+    "dialog",
+    "popup",
+    "overlay",
+    "window",
+    "panel",
+    "drag-and-drop",
+    "dnd",
+    "youtube",
+    "video-player",
+    "react-rnd",
+    "tailwind",
+    "tailwindcss",
+    "shadcn",
+    "shadcn-ui",
+    "typescript",
+    "react19",
+    "nextjs16"
+  ],
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:lib": "tsup",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "prepublishOnly": "pnpm build:lib"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
   },
   "dependencies": {
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "lucide-react": "^0.556.0",
-    "next": "16.0.7",
-    "react": "19.2.0",
-    "react-dom": "19.2.0",
-    "react-rnd": "^10.5.2",
-    "tailwind-merge": "^3.4.0"
+    "react-rnd": "^10.5.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "eslint": "^9",
     "eslint-config-next": "16.0.7",
+    "lucide-react": "^0.556.0",
+    "next": "16.0.7",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "tailwind-merge": "^3.4.0",
     "tailwindcss": "^4",
+    "tsup": "^8.5.1",
     "tw-animate-css": "^1.4.0",
     "typescript": "^5"
   }
