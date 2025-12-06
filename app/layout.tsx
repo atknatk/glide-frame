@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { GlideFrameProvider, DetachedContentProvider } from "@/components/glide-frame";
+import { GlideFrameProvider } from "@/components/glide-frame";
 import { Navigation } from "@/components/Navigation";
 
 const geistSans = Geist({
@@ -30,10 +30,8 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <GlideFrameProvider>
-          <DetachedContentProvider>
-            <Navigation />
-            {children}
-          </DetachedContentProvider>
+          <Navigation />
+          {children}
         </GlideFrameProvider>
       </body>
     </html>

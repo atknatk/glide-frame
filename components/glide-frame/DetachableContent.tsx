@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, ReactNode, useEffect, useSyncExternalStore, createContext, useContext } from "react";
-import { createPortal } from "react-dom";
+import { useState, useRef, useCallback, ReactNode, useEffect, useSyncExternalStore } from "react";
 import { Rnd } from "react-rnd";
 import { ExternalLink, Minimize2 } from "lucide-react";
 import { GlideFrameHeader } from "./GlideFrameHeader";
@@ -55,317 +54,6 @@ export function useDetachableState<T>(id: string, initialValue: T): [T, (value: 
   return [value, setValue];
 }
 
-// ============================================================================
-// Detached Content Provider - manages floating windows across navigation
-// Key: Content is stored ONCE on first registration, never updated after
-// ============================================================================
-
-interface RegisteredContent {
-  id: string;
-  title: string;
-  content: ReactNode; // Stored once, never updated
-  headerStyle?: HeaderStyleOptions;
-  frameStyle?: FrameStyleOptions;
-  lockAspectRatio: boolean;
-  isDetached: boolean;
-  position: { x: number; y: number };
-  size: { width: number; height: number };
-  zIndex: number;
-  isMaximized: boolean;
-  preMaximizeState: { position: { x: number; y: number }; size: { width: number; height: number } } | null;
-  aspectRatio: number | false;
-}
-
-interface DetachedContentContextValue {
-  registerContent: (id: string, content: ReactNode, options: {
-    title: string;
-    headerStyle?: HeaderStyleOptions;
-    frameStyle?: FrameStyleOptions;
-    lockAspectRatio: boolean;
-    initialRect: DOMRect;
-  }) => void;
-  unregisterContent: (id: string) => void;
-  detachContent: (id: string) => void;
-  attachContent: (id: string) => void;
-  isDetached: (id: string) => boolean;
-  updatePosition: (id: string, updates: Partial<RegisteredContent>) => void;
-}
-
-const DetachedContentContext = createContext<DetachedContentContextValue | null>(null);
-
-export function useDetachedContent() {
-  return useContext(DetachedContentContext);
-}
-
-export function DetachedContentProvider({ children }: { children: ReactNode }) {
-  const [contents, setContents] = useState<Map<string, RegisteredContent>>(new Map());
-
-  const registerContent = useCallback((id: string, content: ReactNode, options: {
-    title: string;
-    headerStyle?: HeaderStyleOptions;
-    frameStyle?: FrameStyleOptions;
-    lockAspectRatio: boolean;
-    initialRect: DOMRect;
-  }) => {
-    setContents(prev => {
-      // If already exists, DON'T update content - just return existing
-      if (prev.has(id)) return prev;
-
-      const { initialRect, ...rest } = options;
-      const headerHeight = options.headerStyle?.height || 44;
-
-      const next = new Map(prev);
-      next.set(id, {
-        id,
-        content, // Store content ONCE
-        ...rest,
-        isDetached: false,
-        position: { x: 20, y: 80 },
-        size: { width: initialRect.width, height: initialRect.height + headerHeight },
-        zIndex: 10000,
-        isMaximized: false,
-        preMaximizeState: null,
-        aspectRatio: false,
-      });
-      return next;
-    });
-  }, []);
-
-  const unregisterContent = useCallback((id: string) => {
-    setContents(prev => {
-      const item = prev.get(id);
-      // Don't unregister if detached - keep floating across navigation
-      if (item?.isDetached) return prev;
-      const next = new Map(prev);
-      next.delete(id);
-      return next;
-    });
-  }, []);
-
-  const detachContent = useCallback((id: string) => {
-    setContents(prev => {
-      const item = prev.get(id);
-      if (!item) return prev;
-
-      const viewportWidth = window.innerWidth;
-      const viewportHeight = window.innerHeight;
-      const isMobile = viewportWidth < 768;
-
-      const maxWidth = viewportWidth - 40;
-      const maxHeight = viewportHeight - 100;
-
-      const width = isMobile
-        ? Math.min(item.size.width, maxWidth)
-        : Math.min(Math.max(item.size.width, 400), maxWidth);
-      const height = Math.min(item.size.height, maxHeight);
-
-      const next = new Map(prev);
-      next.set(id, {
-        ...item,
-        isDetached: true,
-        position: { x: 20, y: isMobile ? 60 : 80 },
-        size: { width, height },
-        zIndex: getNextZIndex(),
-        aspectRatio: item.lockAspectRatio ? width / height : false,
-      });
-      return next;
-    });
-  }, []);
-
-  const attachContent = useCallback((id: string) => {
-    setContents(prev => {
-      const item = prev.get(id);
-      if (!item) return prev;
-      const next = new Map(prev);
-      next.set(id, { ...item, isDetached: false, isMaximized: false });
-      return next;
-    });
-  }, []);
-
-  const isDetached = useCallback((id: string) => {
-    return contents.get(id)?.isDetached ?? false;
-  }, [contents]);
-
-  const updatePosition = useCallback((id: string, updates: Partial<RegisteredContent>) => {
-    setContents(prev => {
-      const item = prev.get(id);
-      if (!item) return prev;
-      const next = new Map(prev);
-      next.set(id, { ...item, ...updates });
-      return next;
-    });
-  }, []);
-
-  return (
-    <DetachedContentContext.Provider value={{
-      registerContent,
-      unregisterContent,
-      detachContent,
-      attachContent,
-      isDetached,
-      updatePosition,
-    }}>
-      {children}
-      <FloatingContentRenderer contents={contents} updatePosition={updatePosition} attachContent={attachContent} />
-    </DetachedContentContext.Provider>
-  );
-}
-
-// Renders ONLY detached/floating content via portal
-function FloatingContentRenderer({
-  contents,
-  updatePosition,
-  attachContent,
-}: {
-  contents: Map<string, RegisteredContent>;
-  updatePosition: (id: string, updates: Partial<RegisteredContent>) => void;
-  attachContent: (id: string) => void;
-}) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) return null;
-
-  // Only render detached items
-  const detachedItems = Array.from(contents.values()).filter(item => item.isDetached);
-  if (detachedItems.length === 0) return null;
-
-  return createPortal(
-    <>
-      {detachedItems.map((item) => (
-        <FloatingWindow
-          key={item.id}
-          item={item}
-          updatePosition={updatePosition}
-          attachContent={attachContent}
-        />
-      ))}
-    </>,
-    document.body
-  );
-}
-
-// Floating window with Rnd for drag/resize
-function FloatingWindow({
-  item,
-  updatePosition,
-  attachContent,
-}: {
-  item: RegisteredContent;
-  updatePosition: (id: string, updates: Partial<RegisteredContent>) => void;
-  attachContent: (id: string) => void;
-}) {
-  const bringToFront = useCallback(() => {
-    updatePosition(item.id, { zIndex: getNextZIndex() });
-  }, [item.id, updatePosition]);
-
-  const handleMaximize = useCallback(() => {
-    if (!item.isMaximized) {
-      updatePosition(item.id, {
-        preMaximizeState: { position: item.position, size: item.size },
-        position: { x: 0, y: 0 },
-        size: { width: window.innerWidth, height: window.innerHeight },
-        isMaximized: true,
-      });
-    }
-  }, [item, updatePosition]);
-
-  const handleRestore = useCallback(() => {
-    if (item.isMaximized && item.preMaximizeState) {
-      updatePosition(item.id, {
-        position: item.preMaximizeState.position,
-        size: item.preMaximizeState.size,
-        isMaximized: false,
-      });
-    }
-  }, [item, updatePosition]);
-
-  const handleAttach = useCallback(() => {
-    attachContent(item.id);
-  }, [item.id, attachContent]);
-
-  const frameStyles = {
-    backgroundColor: item.frameStyle?.backgroundColor,
-    borderColor: item.frameStyle?.borderColor,
-    borderWidth: item.frameStyle?.borderWidth,
-    borderRadius: item.frameStyle?.borderRadius,
-    boxShadow: item.frameStyle?.boxShadow || "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
-  };
-
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100vw',
-        height: '100vh',
-        pointerEvents: 'none',
-        zIndex: item.zIndex,
-      }}
-    >
-      <Rnd
-        position={item.position}
-        size={item.size}
-        lockAspectRatio={item.aspectRatio}
-        onDragStart={bringToFront}
-        onDragStop={(_, d) => {
-          if (!item.isMaximized) updatePosition(item.id, { position: { x: d.x, y: d.y } });
-        }}
-        onResizeStart={bringToFront}
-        onResizeStop={(_, __, ref, ___, pos) => {
-          if (!item.isMaximized) {
-            updatePosition(item.id, {
-              size: { width: ref.offsetWidth, height: ref.offsetHeight },
-              position: pos,
-            });
-          }
-        }}
-        onMouseDown={bringToFront}
-        minWidth={Math.min(280, typeof window !== "undefined" ? window.innerWidth - 40 : 280)}
-        minHeight={180}
-        bounds="window"
-        dragHandleClassName="detachable-frame-handle"
-        cancel=".glide-frame-button"
-        disableDragging={item.isMaximized}
-        enableResizing={!item.isMaximized}
-        style={{ pointerEvents: 'auto' }}
-      >
-        <div
-          style={{
-            ...frameStyles,
-            borderStyle: item.frameStyle?.borderWidth ? "solid" : undefined,
-          }}
-          className={cn(
-            "h-full flex flex-col overflow-hidden",
-            "border border-border",
-            !item.frameStyle?.borderRadius && "rounded-lg",
-            item.frameStyle?.className
-          )}
-        >
-          <div className="detachable-frame-handle shrink-0">
-            <GlideFrameHeader
-              title={item.title}
-              isDocked={false}
-              isMaximized={item.isMaximized}
-              onMaximize={handleMaximize}
-              onRestore={item.isMaximized ? handleRestore : handleAttach}
-              onClose={handleAttach}
-              styleOptions={item.headerStyle}
-            />
-          </div>
-          <div className="flex-1 overflow-hidden">
-            {item.content}
-          </div>
-        </div>
-      </Rnd>
-    </div>
-  );
-}
-
 interface DetachableContentProps {
   /** Unique identifier */
   id: string;
@@ -389,8 +77,10 @@ interface DetachableContentProps {
   lockAspectRatio?: boolean;
 }
 
+const DEFAULT_HEADER_HEIGHT = 44;
+
 export function DetachableContent({
-  id,
+  id: _id, // Reserved for future use
   title,
   children,
   headerStyle,
@@ -401,12 +91,77 @@ export function DetachableContent({
   placeholderClassName,
   lockAspectRatio = false,
 }: DetachableContentProps) {
-  const context = useDetachedContent();
-  const containerRef = useRef<HTMLDivElement>(null);
-  const hasRegisteredRef = useRef(false);
+  const [isDetached, setIsDetached] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
 
-  // Check if this content is detached (managed by provider)
-  const isDetachedInProvider = context?.isDetached(id) ?? false;
+  const [originalRect, setOriginalRect] = useState<DOMRect | null>(null);
+  const [position, setPosition] = useState({ x: 100, y: 100 });
+  const [size, setSize] = useState({ width: 480, height: 320 });
+  const [aspectRatio, setAspectRatio] = useState<number | false>(false);
+  const [zIndex, setZIndex] = useState(10000);
+  const [preMaximizeState, setPreMaximizeState] = useState<{
+    position: { x: number; y: number };
+    size: { width: number; height: number };
+  } | null>(null);
+
+  const headerHeight = headerStyle?.height || DEFAULT_HEADER_HEIGHT;
+
+  // Bring to front on focus/click
+  const bringToFront = useCallback(() => {
+    setZIndex(getNextZIndex());
+  }, []);
+
+  const handleDetach = useCallback(() => {
+    if (contentRef.current) {
+      const rect = contentRef.current.getBoundingClientRect();
+      setOriginalRect(rect);
+
+      // Responsive sizing - fit within viewport
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const isMobile = viewportWidth < 768;
+
+      const maxWidth = viewportWidth - 40;
+      const maxHeight = viewportHeight - 100;
+
+      const width = isMobile
+        ? Math.min(rect.width, maxWidth)
+        : Math.min(Math.max(rect.width, 400), maxWidth);
+      const height = Math.min(rect.height + headerHeight, maxHeight);
+
+      if (lockAspectRatio) {
+        setAspectRatio(width / height);
+      }
+
+      setPosition({ x: 20, y: isMobile ? 60 : 80 });
+      setSize({ width, height });
+    }
+    setIsDetached(true);
+    bringToFront();
+  }, [headerHeight, lockAspectRatio, bringToFront]);
+
+  const handleAttach = useCallback(() => {
+    setIsDetached(false);
+    setIsMaximized(false);
+  }, []);
+
+  const handleMaximize = useCallback(() => {
+    if (!isMaximized) {
+      setPreMaximizeState({ position, size });
+      setPosition({ x: 0, y: 0 });
+      setSize({ width: window.innerWidth, height: window.innerHeight });
+    }
+    setIsMaximized(true);
+  }, [isMaximized, position, size]);
+
+  const handleRestore = useCallback(() => {
+    if (isMaximized && preMaximizeState) {
+      setPosition(preMaximizeState.position);
+      setSize(preMaximizeState.size);
+      setIsMaximized(false);
+    }
+  }, [isMaximized, preMaximizeState]);
 
   const buttonPositionClasses = {
     "top-right": "top-2 right-2",
@@ -415,66 +170,120 @@ export function DetachableContent({
     "bottom-left": "bottom-2 left-2",
   };
 
-  // Register content with provider on mount - only ONCE per id
-  useEffect(() => {
-    if (!context || !containerRef.current || hasRegisteredRef.current) return;
+  const frameStyles = {
+    backgroundColor: frameStyle?.backgroundColor,
+    borderColor: frameStyle?.borderColor,
+    borderWidth: frameStyle?.borderWidth,
+    borderRadius: frameStyle?.borderRadius,
+    boxShadow: frameStyle?.boxShadow || "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
+  };
 
-    const rect = containerRef.current.getBoundingClientRect();
-    context.registerContent(id, children, {
-      title,
-      headerStyle,
-      frameStyle,
-      lockAspectRatio,
-      initialRect: rect,
-    });
-    hasRegisteredRef.current = true;
+  // CRITICAL: Children are ALWAYS rendered in the same place - NEVER conditional
+  // Only the container's CSS changes between inline and floating modes
 
-    return () => {
-      context.unregisterContent(id);
-      hasRegisteredRef.current = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [context, id]); // Only depend on context and id - content is registered ONCE
-
-  const handleDetach = useCallback(() => {
-    context?.detachContent(id);
-  }, [context, id]);
-
-  const handleAttach = useCallback(() => {
-    context?.attachContent(id);
-  }, [context, id]);
-
-  // If detached in provider, show placeholder
-  if (isDetachedInProvider) {
-    return (
-      <div
-        className={cn(
-          "rounded-lg border-2 border-dashed border-slate-600",
-          "bg-slate-800/30 flex items-center justify-center",
-          "aspect-video",
-          placeholderClassName,
-          className
-        )}
-      >
-        <button
-          onClick={handleAttach}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
-        >
-          <Minimize2 className="w-4 h-4" />
-          Restore here
-        </button>
-      </div>
-    );
-  }
-
-  // Inline mode - render children directly with CSS-only approach
   return (
     <>
-      <div ref={containerRef} className={cn("relative group", className)}>
-        {children}
+      {/* Placeholder when detached - reserves space in document flow */}
+      {isDetached && originalRect && (
+        <div
+          style={{ width: originalRect.width, height: originalRect.height }}
+          className={cn(
+            "rounded-lg border-2 border-dashed border-slate-600",
+            "bg-slate-800/30 flex items-center justify-center",
+            placeholderClassName
+          )}
+        >
+          <button
+            onClick={handleAttach}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
+          >
+            <Minimize2 className="w-4 h-4" />
+            Restore here
+          </button>
+        </div>
+      )}
 
-        {/* Detach button (inside/overlay) */}
-        {detachButtonStyle === "inside" && (
+      {/* Main container - CSS changes based on mode, children NEVER unmount */}
+      <div
+        ref={contentRef}
+        style={isDetached ? {
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          pointerEvents: 'none',
+          zIndex,
+        } : {
+          position: 'relative',
+        }}
+        className={cn(!isDetached && "group", !isDetached && className)}
+      >
+        <Rnd
+          position={isDetached ? position : { x: 0, y: 0 }}
+          size={isDetached ? size : { width: '100%', height: '100%' }}
+          lockAspectRatio={isDetached ? aspectRatio : false}
+          onDragStart={bringToFront}
+          onDragStop={(_, d) => {
+            if (isDetached && !isMaximized) setPosition({ x: d.x, y: d.y });
+          }}
+          onResizeStart={bringToFront}
+          onResizeStop={(_, __, ref, ___, pos) => {
+            if (isDetached && !isMaximized) {
+              setSize({ width: ref.offsetWidth, height: ref.offsetHeight });
+              setPosition(pos);
+            }
+          }}
+          onMouseDown={isDetached ? bringToFront : undefined}
+          minWidth={isDetached ? Math.min(280, typeof window !== "undefined" ? window.innerWidth - 40 : 280) : undefined}
+          minHeight={isDetached ? 180 : undefined}
+          bounds={isDetached ? "window" : undefined}
+          dragHandleClassName="detachable-frame-handle"
+          cancel=".glide-frame-button"
+          disableDragging={!isDetached || isMaximized}
+          enableResizing={isDetached && !isMaximized}
+          style={{
+            pointerEvents: 'auto',
+            position: isDetached ? undefined : 'static',
+            transform: isDetached ? undefined : 'none',
+          }}
+        >
+          <div
+            style={isDetached ? {
+              ...frameStyles,
+              borderStyle: frameStyle?.borderWidth ? "solid" : undefined,
+            } : undefined}
+            className={cn(
+              "h-full flex flex-col overflow-hidden",
+              isDetached && "border border-border",
+              isDetached && !frameStyle?.borderRadius && "rounded-lg",
+              isDetached && frameStyle?.className
+            )}
+          >
+            {/* Header - only visible when detached */}
+            {isDetached && (
+              <div className="detachable-frame-handle shrink-0">
+                <GlideFrameHeader
+                  title={title}
+                  isDocked={false}
+                  isMaximized={isMaximized}
+                  onMaximize={handleMaximize}
+                  onRestore={isMaximized ? handleRestore : handleAttach}
+                  onClose={handleAttach}
+                  styleOptions={headerStyle}
+                />
+              </div>
+            )}
+
+            {/* Content - ALWAYS rendered, NEVER conditional */}
+            <div className="flex-1 overflow-hidden">
+              {children}
+            </div>
+          </div>
+        </Rnd>
+
+        {/* Detach button (inside/overlay) - only visible when inline */}
+        {!isDetached && detachButtonStyle === "inside" && (
           <button
             onClick={handleDetach}
             className={cn(
@@ -492,7 +301,7 @@ export function DetachableContent({
       </div>
 
       {/* Detach button (outside) - below content, small and subtle */}
-      {detachButtonStyle === "outside" && (
+      {!isDetached && detachButtonStyle === "outside" && (
         <button
           onClick={handleDetach}
           className={cn(
