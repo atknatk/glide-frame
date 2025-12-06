@@ -190,7 +190,18 @@ export function DetachableContent({
 
   // Floating frame rendered via portal - always mounted to preserve state
   const floatingFrame = mounted && createPortal(
-    <div style={{ display: isDetached ? 'block' : 'none' }}>
+    <div
+      style={{
+        display: isDetached ? 'block' : 'none',
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100vw',
+        height: '100vh',
+        pointerEvents: 'none',
+        zIndex,
+      }}
+    >
       <Rnd
         position={position}
         size={size}
@@ -214,7 +225,7 @@ export function DetachableContent({
         cancel=".glide-frame-button"
         disableDragging={isMaximized}
         enableResizing={!isMaximized}
-        style={{ zIndex }}
+        style={{ pointerEvents: 'auto' }}
       >
         <div
           ref={containerRef}
