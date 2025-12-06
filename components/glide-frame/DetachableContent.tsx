@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useCallback, ReactNode, useEffect, useSyncExternalStore } from "react";
-import { createPortal } from "react-dom";
 import { Rnd } from "react-rnd";
 import { ExternalLink, Minimize2 } from "lucide-react";
 import { GlideFrameHeader } from "./GlideFrameHeader";
@@ -79,7 +78,7 @@ interface DetachableContentProps {
 const DEFAULT_HEADER_HEIGHT = 44;
 
 export function DetachableContent({
-  id,
+  id: _id, // Reserved for future use
   title,
   children,
   headerStyle,
@@ -98,18 +97,12 @@ export function DetachableContent({
   const [size, setSize] = useState({ width: 480, height: 320 });
   const [aspectRatio, setAspectRatio] = useState<number | false>(false);
   const [zIndex, setZIndex] = useState(10000);
-  const [mounted, setMounted] = useState(false);
   const [preMaximizeState, setPreMaximizeState] = useState<{
     position: { x: number; y: number };
     size: { width: number; height: number };
   } | null>(null);
 
   const headerHeight = headerStyle?.height || DEFAULT_HEADER_HEIGHT;
-
-  // Client-side mount check for portal
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // Bring to front on focus/click
   const bringToFront = useCallback(() => {
@@ -182,102 +175,12 @@ export function DetachableContent({
     boxShadow: frameStyle?.boxShadow || "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
   };
 
-  // Floating frame - only rendered when detached, via portal
-  const floatingFrame = mounted && isDetached && createPortal(
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        width: '100vw',
-        height: '100vh',
-        pointerEvents: 'none',
-        zIndex,
-      }}
-    >
-      <Rnd
-        position={position}
-        size={size}
-        lockAspectRatio={aspectRatio}
-        onDragStart={bringToFront}
-        onDragStop={(_, d) => {
-          if (!isMaximized) setPosition({ x: d.x, y: d.y });
-        }}
-        onResizeStart={bringToFront}
-        onResizeStop={(_, __, ref, ___, pos) => {
-          if (!isMaximized) {
-            setSize({ width: ref.offsetWidth, height: ref.offsetHeight });
-            setPosition(pos);
-          }
-        }}
-        onMouseDown={bringToFront}
-        minWidth={Math.min(280, typeof window !== "undefined" ? window.innerWidth - 40 : 280)}
-        minHeight={180}
-        bounds="window"
-        dragHandleClassName="detachable-frame-handle"
-        cancel=".glide-frame-button"
-        disableDragging={isMaximized}
-        enableResizing={!isMaximized}
-        style={{ pointerEvents: 'auto' }}
-      >
-        <div
-          style={{
-            ...frameStyles,
-            borderStyle: frameStyle?.borderWidth ? "solid" : undefined,
-          }}
-          className={cn(
-            "h-full flex flex-col overflow-hidden",
-            "border border-border",
-            !frameStyle?.borderRadius && "rounded-lg",
-            frameStyle?.className
-          )}
-        >
-          <div className="detachable-frame-handle shrink-0">
-            <GlideFrameHeader
-              title={title}
-              isDocked={false}
-              isMaximized={isMaximized}
-              onMaximize={handleMaximize}
-              onRestore={isMaximized ? handleRestore : handleAttach}
-              onClose={handleAttach}
-              styleOptions={headerStyle}
-            />
-          </div>
-          <div className="flex-1 overflow-hidden">
-            {children}
-          </div>
-        </div>
-      </Rnd>
-    </div>,
-    document.body
-  );
+  // CRITICAL: Children are ALWAYS rendered in the same place - NEVER conditional
+  // Only the container's CSS changes between inline and floating modes
 
   return (
     <>
-      {/* Inline content - normal document flow */}
-      {!isDetached && (
-        <div
-          ref={contentRef}
-          className={cn("relative group", className)}
-        >
-          {children}
-          <button
-            onClick={handleDetach}
-            className={cn(
-              "absolute opacity-0 group-hover:opacity-100",
-              "p-2 rounded-lg bg-black/70 text-white",
-              "hover:bg-black/90 transition-all duration-200",
-              "backdrop-blur-sm",
-              buttonPositionClasses[detachButtonPosition]
-            )}
-            title="Pop out to floating window"
-          >
-            <ExternalLink className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Placeholder when detached */}
+      {/* Placeholder when detached - reserves space in document flow */}
       {isDetached && originalRect && (
         <div
           style={{ width: originalRect.width, height: originalRect.height }}
@@ -297,8 +200,102 @@ export function DetachableContent({
         </div>
       )}
 
-      {/* Floating frame via portal */}
-      {floatingFrame}
+      {/* Main container - CSS changes based on mode, children NEVER unmount */}
+      <div
+        ref={contentRef}
+        style={isDetached ? {
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100vw',
+          height: '100vh',
+          pointerEvents: 'none',
+          zIndex,
+        } : {
+          position: 'relative',
+        }}
+        className={cn(!isDetached && "group", !isDetached && className)}
+      >
+        <Rnd
+          position={isDetached ? position : { x: 0, y: 0 }}
+          size={isDetached ? size : { width: '100%', height: '100%' }}
+          lockAspectRatio={isDetached ? aspectRatio : false}
+          onDragStart={bringToFront}
+          onDragStop={(_, d) => {
+            if (isDetached && !isMaximized) setPosition({ x: d.x, y: d.y });
+          }}
+          onResizeStart={bringToFront}
+          onResizeStop={(_, __, ref, ___, pos) => {
+            if (isDetached && !isMaximized) {
+              setSize({ width: ref.offsetWidth, height: ref.offsetHeight });
+              setPosition(pos);
+            }
+          }}
+          onMouseDown={isDetached ? bringToFront : undefined}
+          minWidth={isDetached ? Math.min(280, typeof window !== "undefined" ? window.innerWidth - 40 : 280) : undefined}
+          minHeight={isDetached ? 180 : undefined}
+          bounds={isDetached ? "window" : undefined}
+          dragHandleClassName="detachable-frame-handle"
+          cancel=".glide-frame-button"
+          disableDragging={!isDetached || isMaximized}
+          enableResizing={isDetached && !isMaximized}
+          style={{
+            pointerEvents: 'auto',
+            position: isDetached ? undefined : 'static',
+            transform: isDetached ? undefined : 'none',
+          }}
+        >
+          <div
+            style={isDetached ? {
+              ...frameStyles,
+              borderStyle: frameStyle?.borderWidth ? "solid" : undefined,
+            } : undefined}
+            className={cn(
+              "h-full flex flex-col overflow-hidden",
+              isDetached && "border border-border",
+              isDetached && !frameStyle?.borderRadius && "rounded-lg",
+              isDetached && frameStyle?.className
+            )}
+          >
+            {/* Header - only visible when detached */}
+            {isDetached && (
+              <div className="detachable-frame-handle shrink-0">
+                <GlideFrameHeader
+                  title={title}
+                  isDocked={false}
+                  isMaximized={isMaximized}
+                  onMaximize={handleMaximize}
+                  onRestore={isMaximized ? handleRestore : handleAttach}
+                  onClose={handleAttach}
+                  styleOptions={headerStyle}
+                />
+              </div>
+            )}
+
+            {/* Content - ALWAYS rendered, NEVER conditional */}
+            <div className="flex-1 overflow-hidden">
+              {children}
+            </div>
+          </div>
+        </Rnd>
+
+        {/* Detach button - only visible when inline */}
+        {!isDetached && (
+          <button
+            onClick={handleDetach}
+            className={cn(
+              "absolute opacity-0 group-hover:opacity-100 z-10",
+              "p-2 rounded-lg bg-black/70 text-white",
+              "hover:bg-black/90 transition-all duration-200",
+              "backdrop-blur-sm",
+              buttonPositionClasses[detachButtonPosition]
+            )}
+            title="Pop out to floating window"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </button>
+        )}
+      </div>
     </>
   );
 }
