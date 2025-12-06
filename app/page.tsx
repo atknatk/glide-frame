@@ -1,7 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { useGlideFrameContext } from "@/components/glide-frame";
+import { useGlideFrameContext, DetachableContent } from "@/components/glide-frame";
 import { Play, Video, Gamepad2, Layout } from "lucide-react";
 
 const MOBILE_BREAKPOINT = 768;
@@ -143,6 +143,47 @@ export default function Home() {
           <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-4 md:p-6 border border-slate-700">
             <h3 className="text-lg md:text-xl font-semibold text-white mb-1 md:mb-2">📐 Resizable</h3>
             <p className="text-slate-400 text-sm md:text-base">Resize from corners. Multi-instance z-index support.</p>
+          </div>
+        </div>
+
+        {/* Detachable Content Demo */}
+        <div className="mt-12 max-w-4xl mx-auto">
+          <h2 className="text-2xl font-bold text-white mb-4 text-center">🎯 Detachable Content Demo</h2>
+          <p className="text-slate-400 text-center mb-6">
+            Hover over the video and click the pop-out button. The video will float without reloading!
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <DetachableContent
+              id="demo-video-1"
+              title="YouTube Video"
+              headerStyle={{ backgroundColor: "#dc2626", textColor: "#fff", buttonColor: "#fff" }}
+              frameStyle={{ borderRadius: 12, borderColor: "#dc2626", borderWidth: 2 }}
+            >
+              <iframe
+                src="https://www.youtube.com/embed/dQw4w9WgXcQ"
+                className="w-full aspect-video border-0 rounded-lg"
+                title="YouTube Video"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </DetachableContent>
+
+            <DetachableContent
+              id="demo-component-1"
+              title="Interactive Component"
+              headerStyle={{ backgroundColor: "#7c3aed", textColor: "#fff", buttonColor: "#fff" }}
+              frameStyle={{ borderRadius: 12, borderColor: "#7c3aed", borderWidth: 2 }}
+            >
+              <div className="aspect-video bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+                <div className="text-center text-white p-4">
+                  <h3 className="text-xl font-bold mb-2">Interactive Component</h3>
+                  <p className="text-white/80 text-sm">This component preserves its state when detached!</p>
+                  <button className="mt-4 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors">
+                    Click Me
+                  </button>
+                </div>
+              </div>
+            </DetachableContent>
           </div>
         </div>
 
