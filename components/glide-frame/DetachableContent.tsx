@@ -280,12 +280,22 @@ export function DetachableContent({
     document.body
   );
 
+  // Content wrapper portal - rendered to body to avoid React reconciliation issues
+  const contentWrapper = mounted && createPortal(
+    <div
+      ref={contentWrapperRef}
+      className="h-full w-full"
+      style={{ display: 'contents' }}
+    >
+      {children}
+    </div>,
+    document.body
+  );
+
   return (
     <>
-      {/* Content wrapper - rendered once, moved between containers via DOM */}
-      <div ref={contentWrapperRef} className="h-full w-full">
-        {children}
-      </div>
+      {/* Content wrapper rendered via portal to avoid React tree conflicts */}
+      {contentWrapper}
 
       {/* Inline container - visible when not detached */}
       <div
