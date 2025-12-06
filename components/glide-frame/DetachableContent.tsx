@@ -182,51 +182,8 @@ export function DetachableContent({
     boxShadow: frameStyle?.boxShadow || "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
   };
 
-  // CRITICAL: Children must NEVER be unmounted/remounted to preserve iframe state
-  // Solution: Render children ONCE in a portal, control position with CSS
-  // When inline: position over placeholder | When floating: use Rnd position
-
-  // Track inline placeholder position for overlay mode
-  const [inlineRect, setInlineRect] = useState<DOMRect | null>(null);
-
-  // Update inline position on scroll/resize when not detached
-  useEffect(() => {
-    if (isDetached || !contentRef.current) return;
-
-    const updateRect = () => {
-      if (contentRef.current) {
-        setInlineRect(contentRef.current.getBoundingClientRect());
-      }
-    };
-
-    updateRect();
-    window.addEventListener('scroll', updateRect, true);
-    window.addEventListener('resize', updateRect);
-
-    // Also use ResizeObserver for container size changes
-    const observer = new ResizeObserver(updateRect);
-    observer.observe(contentRef.current);
-
-    return () => {
-      window.removeEventListener('scroll', updateRect, true);
-      window.removeEventListener('resize', updateRect);
-      observer.disconnect();
-    };
-  }, [isDetached]);
-
-  // SOLUTION: Always render Rnd with children, but position it either:
-  // - Over inline placeholder (when !isDetached)
-  // - At floating position (when isDetached)
-  // This ensures children are NEVER unmounted
-
-  // Calculate current position and size based on mode
-  const currentPosition = isDetached ? position : { x: inlineRect?.left || 0, y: inlineRect?.top || 0 };
-  const currentSize = isDetached
-    ? size
-    : { width: inlineRect?.width || 400, height: inlineRect?.height || 300 };
-
-  // Single content portal - Rnd ALWAYS contains children, never conditional
-  const contentPortal = mounted && createPortal(
+  // Floating frame - only rendered when detached, via portal
+  const floatingFrame = mounted && isDetached && createPortal(
     <div
       style={{
         position: 'fixed',
@@ -235,62 +192,57 @@ export function DetachableContent({
         width: '100vw',
         height: '100vh',
         pointerEvents: 'none',
-        zIndex: isDetached ? zIndex : 1,
+        zIndex,
       }}
     >
       <Rnd
-        position={currentPosition}
-        size={currentSize}
-        lockAspectRatio={isDetached ? aspectRatio : false}
+        position={position}
+        size={size}
+        lockAspectRatio={aspectRatio}
         onDragStart={bringToFront}
         onDragStop={(_, d) => {
-          if (isDetached && !isMaximized) setPosition({ x: d.x, y: d.y });
+          if (!isMaximized) setPosition({ x: d.x, y: d.y });
         }}
         onResizeStart={bringToFront}
         onResizeStop={(_, __, ref, ___, pos) => {
-          if (isDetached && !isMaximized) {
+          if (!isMaximized) {
             setSize({ width: ref.offsetWidth, height: ref.offsetHeight });
             setPosition(pos);
           }
         }}
         onMouseDown={bringToFront}
-        minWidth={isDetached ? Math.min(280, typeof window !== "undefined" ? window.innerWidth - 40 : 280) : undefined}
-        minHeight={isDetached ? 180 : undefined}
-        bounds={isDetached ? "window" : undefined}
+        minWidth={Math.min(280, typeof window !== "undefined" ? window.innerWidth - 40 : 280)}
+        minHeight={180}
+        bounds="window"
         dragHandleClassName="detachable-frame-handle"
         cancel=".glide-frame-button"
-        disableDragging={!isDetached || isMaximized}
-        enableResizing={isDetached && !isMaximized}
+        disableDragging={isMaximized}
+        enableResizing={!isMaximized}
         style={{ pointerEvents: 'auto' }}
       >
         <div
           style={{
-            ...(isDetached ? frameStyles : {}),
-            borderStyle: isDetached && frameStyle?.borderWidth ? "solid" : undefined,
-            height: '100%',
+            ...frameStyles,
+            borderStyle: frameStyle?.borderWidth ? "solid" : undefined,
           }}
           className={cn(
-            "flex flex-col overflow-hidden",
-            isDetached && "border border-border",
-            isDetached && !frameStyle?.borderRadius && "rounded-lg",
-            isDetached && frameStyle?.className
+            "h-full flex flex-col overflow-hidden",
+            "border border-border",
+            !frameStyle?.borderRadius && "rounded-lg",
+            frameStyle?.className
           )}
         >
-          {/* Header - only visible when detached */}
-          {isDetached && (
-            <div className="detachable-frame-handle shrink-0">
-              <GlideFrameHeader
-                title={title}
-                isDocked={false}
-                isMaximized={isMaximized}
-                onMaximize={handleMaximize}
-                onRestore={isMaximized ? handleRestore : handleAttach}
-                onClose={handleAttach}
-                styleOptions={headerStyle}
-              />
-            </div>
-          )}
-          {/* Content - ALWAYS rendered, never conditional */}
+          <div className="detachable-frame-handle shrink-0">
+            <GlideFrameHeader
+              title={title}
+              isDocked={false}
+              isMaximized={isMaximized}
+              onMaximize={handleMaximize}
+              onRestore={isMaximized ? handleRestore : handleAttach}
+              onClose={handleAttach}
+              styleOptions={headerStyle}
+            />
+          </div>
           <div className="flex-1 overflow-hidden">
             {children}
           </div>
@@ -302,34 +254,28 @@ export function DetachableContent({
 
   return (
     <>
-      {/* Inline placeholder - maintains layout space and hosts hover button */}
-      <div
-        ref={contentRef}
-        className={cn("relative group", className)}
-        style={isDetached ? { display: 'none' } : undefined}
-      >
-        {/* Spacer div - same size as content but invisible (content is in portal) */}
+      {/* Inline content - normal document flow */}
+      {!isDetached && (
         <div
-          className="w-full pointer-events-none"
-          style={{
-            aspectRatio: originalRect ? `${originalRect.width} / ${originalRect.height}` : undefined,
-            minHeight: originalRect?.height || 200,
-          }}
-        />
-        <button
-          onClick={handleDetach}
-          className={cn(
-            "absolute opacity-0 group-hover:opacity-100",
-            "p-2 rounded-lg bg-black/70 text-white",
-            "hover:bg-black/90 transition-all duration-200",
-            "backdrop-blur-sm",
-            buttonPositionClasses[detachButtonPosition]
-          )}
-          title="Pop out to floating window"
+          ref={contentRef}
+          className={cn("relative group", className)}
         >
-          <ExternalLink className="w-4 h-4" />
-        </button>
-      </div>
+          {children}
+          <button
+            onClick={handleDetach}
+            className={cn(
+              "absolute opacity-0 group-hover:opacity-100",
+              "p-2 rounded-lg bg-black/70 text-white",
+              "hover:bg-black/90 transition-all duration-200",
+              "backdrop-blur-sm",
+              buttonPositionClasses[detachButtonPosition]
+            )}
+            title="Pop out to floating window"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Placeholder when detached */}
       {isDetached && originalRect && (
@@ -351,8 +297,8 @@ export function DetachableContent({
         </div>
       )}
 
-      {/* Content portal - children rendered ONCE, position controlled by CSS */}
-      {contentPortal}
+      {/* Floating frame via portal */}
+      {floatingFrame}
     </>
   );
 }
