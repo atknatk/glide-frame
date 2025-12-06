@@ -2,9 +2,9 @@
 
 import { useState, useRef, useCallback, ReactNode, useEffect, useSyncExternalStore } from "react";
 import { Rnd } from "react-rnd";
-import { ExternalLink, Minimize2 } from "lucide-react";
+import { ExternalLink, Minimize2, ChevronLeft, ChevronRight } from "lucide-react";
 import { GlideFrameHeader } from "./GlideFrameHeader";
-import { HeaderStyleOptions, FrameStyleOptions } from "./types";
+import { HeaderStyleOptions, FrameStyleOptions, DockSide, DOCKED_HANDLE_WIDTH, DOCKED_HEIGHT, MOMENTUM_FRICTION, MOMENTUM_MIN_VELOCITY, MOMENTUM_MULTIPLIER, DOCK_MIN_VELOCITY } from "./types";
 import { cn } from "@/lib/utils";
 
 // Global z-index manager for focus
@@ -90,6 +90,9 @@ export function DetachableContent({
 }: DetachableContentProps) {
   const [isDetached, setIsDetached] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
+  const [isDocked, setIsDocked] = useState(false);
+  const [dockedSide, setDockedSide] = useState<"left" | "right" | null>(null);
+  const [dockedY, setDockedY] = useState(100);
   const contentRef = useRef<HTMLDivElement>(null);
 
   const [originalRect, setOriginalRect] = useState<DOMRect | null>(null);
@@ -102,6 +105,13 @@ export function DetachableContent({
     size: { width: number; height: number };
   } | null>(null);
 
+  // Momentum tracking refs
+  const lastPositionRef = useRef<{ x: number; y: number } | null>(null);
+  const lastTimeRef = useRef<number>(0);
+  const velocityRef = useRef<{ vx: number; vy: number }>({ vx: 0, vy: 0 });
+  const animationFrameRef = useRef<number | null>(null);
+  const [isMomentumActive, setIsMomentumActive] = useState(false);
+
   const headerHeight = headerStyle?.height || DEFAULT_HEADER_HEIGHT;
 
   // Bring to front on focus/click
@@ -109,12 +119,168 @@ export function DetachableContent({
     setZIndex(getNextZIndex());
   }, []);
 
+  // Dock to left edge
+  const dockLeft = useCallback((y?: number) => {
+    setDockedSide("left");
+    setDockedY(y ?? position.y);
+    setIsDocked(true);
+    setIsMaximized(false);
+  }, [position.y]);
+
+  // Dock to right edge
+  const dockRight = useCallback((y?: number) => {
+    setDockedSide("right");
+    setDockedY(y ?? position.y);
+    setIsDocked(true);
+    setIsMaximized(false);
+  }, [position.y]);
+
+  // Undock
+  const handleUndock = useCallback(() => {
+    if (!isDocked) return;
+
+    const windowWidth = typeof window !== "undefined" ? window.innerWidth : 1920;
+    const newX = dockedSide === "left" ? 20 : windowWidth - size.width - 20;
+
+    setPosition({ x: newX, y: dockedY });
+    setIsDocked(false);
+    setDockedSide(null);
+    bringToFront();
+  }, [isDocked, dockedSide, dockedY, size.width, bringToFront]);
+
+  // Store refs for animation callback
+  const stateRef = useRef({ position, size, isMaximized });
+  useEffect(() => {
+    stateRef.current = { position, size, isMaximized };
+  }, [position, size, isMaximized]);
+
+  // Momentum animation
+  const animateMomentumRef = useRef<((pos: { x: number; y: number }, vel: { vx: number; vy: number }) => void) | null>(null);
+
+  useEffect(() => {
+    animateMomentumRef.current = (currentPos, velocity) => {
+      const windowWidth = typeof window !== "undefined" ? window.innerWidth : 1920;
+      const windowHeight = typeof window !== "undefined" ? window.innerHeight : 1080;
+      const frameWidth = stateRef.current.size.width;
+      const frameHeight = stateRef.current.size.height;
+
+      // Apply velocity
+      let newX = currentPos.x + velocity.vx;
+      let newY = currentPos.y + velocity.vy;
+
+      // Track if we hit an edge
+      let hitLeftEdge = false;
+      let hitRightEdge = false;
+
+      // Boundary constraints
+      if (newX <= 0) {
+        newX = 0;
+        hitLeftEdge = true;
+      }
+      if (newX >= windowWidth - frameWidth) {
+        newX = windowWidth - frameWidth;
+        hitRightEdge = true;
+      }
+      newY = Math.max(0, Math.min(newY, windowHeight - frameHeight));
+
+      // Dock if frame hits edge with enough speed
+      const totalSpeed = Math.sqrt(velocity.vx * velocity.vx + velocity.vy * velocity.vy);
+
+      if (hitLeftEdge && totalSpeed >= DOCK_MIN_VELOCITY) {
+        dockLeft(newY);
+        setIsMomentumActive(false);
+        return;
+      }
+      if (hitRightEdge && totalSpeed >= DOCK_MIN_VELOCITY) {
+        dockRight(newY);
+        setIsMomentumActive(false);
+        return;
+      }
+
+      // Update position
+      setPosition({ x: newX, y: newY });
+
+      // If hit edge but velocity too low, stop momentum
+      if (hitLeftEdge || hitRightEdge) {
+        setIsMomentumActive(false);
+        return;
+      }
+
+      // Apply friction
+      velocity.vx *= MOMENTUM_FRICTION;
+      velocity.vy *= MOMENTUM_FRICTION;
+
+      // Continue animation if velocity is significant
+      if (Math.abs(velocity.vx) > MOMENTUM_MIN_VELOCITY || Math.abs(velocity.vy) > MOMENTUM_MIN_VELOCITY) {
+        animationFrameRef.current = requestAnimationFrame(() => {
+          animateMomentumRef.current?.({ x: newX, y: newY }, velocity);
+        });
+      } else {
+        setIsMomentumActive(false);
+      }
+    };
+  }, [dockLeft, dockRight]);
+
+  // Handle drag for velocity tracking
+  const handleDrag = useCallback((_e: unknown, d: { x: number; y: number }) => {
+    const now = performance.now();
+    const currentPos = { x: d.x, y: d.y };
+
+    if (lastPositionRef.current && lastTimeRef.current) {
+      const dt = now - lastTimeRef.current;
+      if (dt > 0 && dt < 100) {
+        const vx = ((currentPos.x - lastPositionRef.current.x) / dt) * MOMENTUM_MULTIPLIER;
+        const vy = ((currentPos.y - lastPositionRef.current.y) / dt) * MOMENTUM_MULTIPLIER;
+
+        if (Math.abs(vx) > 0.1 || Math.abs(vy) > 0.1) {
+          velocityRef.current = { vx, vy };
+        }
+      }
+    }
+
+    lastPositionRef.current = currentPos;
+    lastTimeRef.current = now;
+  }, []);
+
+  // Handle drag stop with momentum
+  const handleDragStop = useCallback((_e: unknown, d: { x: number; y: number }) => {
+    const finalPosition = { x: d.x, y: d.y };
+    const velocity = velocityRef.current;
+
+    // Reset tracking
+    lastPositionRef.current = null;
+    lastTimeRef.current = 0;
+
+    // Check if we should apply momentum
+    const speed = Math.sqrt(velocity.vx * velocity.vx + velocity.vy * velocity.vy);
+
+    if (speed > 1 && !isMaximized) {
+      setIsMomentumActive(true);
+      animateMomentumRef.current?.(finalPosition, { ...velocity });
+    } else {
+      setPosition(finalPosition);
+    }
+
+    // Reset velocity
+    velocityRef.current = { vx: 0, vy: 0 };
+  }, [isMaximized]);
+
+  // Handle drag start
+  const handleDragStart = useCallback(() => {
+    // Cancel any ongoing momentum animation
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    setIsMomentumActive(false);
+    bringToFront();
+  }, [bringToFront]);
+
   const handleDetach = useCallback(() => {
     if (contentRef.current) {
       const rect = contentRef.current.getBoundingClientRect();
       setOriginalRect(rect);
 
-      // Responsive sizing - fit within viewport
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
       const isMobile = viewportWidth < 768;
@@ -135,12 +301,16 @@ export function DetachableContent({
       setSize({ width, height });
     }
     setIsDetached(true);
+    setIsDocked(false);
+    setDockedSide(null);
     bringToFront();
   }, [headerHeight, lockAspectRatio, bringToFront]);
 
   const handleAttach = useCallback(() => {
     setIsDetached(false);
     setIsMaximized(false);
+    setIsDocked(false);
+    setDockedSide(null);
   }, []);
 
   const handleMaximize = useCallback(() => {
@@ -177,6 +347,78 @@ export function DetachableContent({
 
   // CRITICAL: Children are ALWAYS rendered in the same place - NEVER conditional
   // Only the container's CSS changes between inline and floating modes
+
+  // If docked, render the dock handle
+  if (isDetached && isDocked) {
+    const isDockedLeft = dockedSide === "left";
+
+    return (
+      <>
+        {/* Placeholder when detached */}
+        {originalRect && (
+          <div
+            style={{ width: originalRect.width, height: originalRect.height }}
+            className={cn(
+              "rounded-lg border-2 border-dashed border-slate-600",
+              "bg-slate-800/30 flex items-center justify-center",
+              placeholderClassName
+            )}
+          >
+            <button
+              onClick={handleAttach}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm transition-colors"
+            >
+              <Minimize2 className="w-4 h-4" />
+              Restore here
+            </button>
+          </div>
+        )}
+
+        {/* Dock handle */}
+        <div
+          onClick={handleUndock}
+          onTouchEnd={handleUndock}
+          style={{
+            zIndex,
+            position: "fixed",
+            top: dockedY,
+            [isDockedLeft ? "left" : "right"]: 0,
+            width: DOCKED_HANDLE_WIDTH,
+            height: DOCKED_HEIGHT,
+            transition: "all 200ms ease-out",
+          }}
+          className={cn(
+            "cursor-pointer",
+            "flex items-center justify-center",
+            isDockedLeft ? "rounded-r-xl" : "rounded-l-xl",
+            "bg-primary/90 backdrop-blur-sm",
+            "shadow-lg shadow-black/20",
+            "border border-border/50",
+            isDockedLeft ? "border-l-0" : "border-r-0",
+            "hover:bg-primary",
+            "hover:w-10",
+            "active:scale-95",
+            "transition-all duration-150",
+            "touch-manipulation"
+          )}
+          role="button"
+          aria-label={`Restore ${title}`}
+          title={`Restore ${title}`}
+        >
+          {isDockedLeft ? (
+            <ChevronRight className="h-5 w-5 text-primary-foreground" />
+          ) : (
+            <ChevronLeft className="h-5 w-5 text-primary-foreground" />
+          )}
+        </div>
+
+        {/* Hidden content container to preserve children */}
+        <div style={{ position: 'fixed', left: -9999, top: -9999, visibility: 'hidden' }}>
+          {children}
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -220,10 +462,9 @@ export function DetachableContent({
           position={isDetached ? position : { x: 0, y: 0 }}
           size={isDetached ? size : { width: '100%', height: '100%' }}
           lockAspectRatio={isDetached ? aspectRatio : false}
-          onDragStart={bringToFront}
-          onDragStop={(_, d) => {
-            if (isDetached && !isMaximized) setPosition({ x: d.x, y: d.y });
-          }}
+          onDragStart={handleDragStart}
+          onDrag={handleDrag}
+          onDragStop={handleDragStop}
           onResizeStart={bringToFront}
           onResizeStop={(_, __, ref, ___, pos) => {
             if (isDetached && !isMaximized) {
@@ -237,8 +478,8 @@ export function DetachableContent({
           bounds={isDetached ? "window" : undefined}
           dragHandleClassName="detachable-frame-handle"
           cancel=".glide-frame-button"
-          disableDragging={!isDetached || isMaximized}
-          enableResizing={isDetached && !isMaximized}
+          disableDragging={!isDetached || isMaximized || isMomentumActive}
+          enableResizing={isDetached && !isMaximized && !isMomentumActive}
           style={{
             pointerEvents: 'auto',
             position: isDetached ? undefined : 'static',
