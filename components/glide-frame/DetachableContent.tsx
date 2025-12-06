@@ -57,8 +57,9 @@ export function DetachableContent({
     if (contentRef.current) {
       const rect = contentRef.current.getBoundingClientRect();
       setOriginalRect(rect);
-      setPosition({ x: rect.left, y: Math.max(20, rect.top - headerHeight) });
-      setSize({ width: rect.width, height: rect.height + headerHeight });
+      // Position at top-left with some padding, not at the original element position
+      setPosition({ x: 20, y: 80 });
+      setSize({ width: Math.max(rect.width, 400), height: rect.height + headerHeight });
     }
     setIsDetached(true);
   }, [headerHeight]);
