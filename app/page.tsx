@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, useState } from "react";
 import { useGlideFrameContext, DetachableContent } from "@/components/glide-frame";
 import { Play, Video, Gamepad2, Layout, Package } from "lucide-react";
 
@@ -26,6 +26,34 @@ function DemoContent({ title, color }: { title: string; color: string }) {
         <br />
         Drag to edge → Dock!
       </p>
+    </div>
+  );
+}
+
+function InteractiveCounter() {
+  const [count, setCount] = useState(0);
+
+  return (
+    <div className="aspect-video bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+      <div className="text-center text-white p-4">
+        <h3 className="text-xl font-bold mb-2">Interactive Counter</h3>
+        <p className="text-white/80 text-sm mb-4">State persists when detached!</p>
+        <div className="flex items-center justify-center gap-4">
+          <button
+            onClick={() => setCount((c) => c - 1)}
+            className="w-12 h-12 text-2xl font-bold bg-white/20 hover:bg-white/30 rounded-full transition-colors"
+          >
+            −
+          </button>
+          <span className="text-4xl font-bold w-16 text-center">{count}</span>
+          <button
+            onClick={() => setCount((c) => c + 1)}
+            className="w-12 h-12 text-2xl font-bold bg-white/20 hover:bg-white/30 rounded-full transition-colors"
+          >
+            +
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -190,19 +218,11 @@ export default function Home() {
 
             <DetachableContent
               id="demo-component-1"
-              title="Interactive Component"
+              title="Interactive Counter"
               headerStyle={{ backgroundColor: "#7c3aed", textColor: "#fff", buttonColor: "#fff" }}
               frameStyle={{ borderRadius: 12, borderColor: "#7c3aed", borderWidth: 2 }}
             >
-              <div className="aspect-video bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
-                <div className="text-center text-white p-4">
-                  <h3 className="text-xl font-bold mb-2">Interactive Component</h3>
-                  <p className="text-white/80 text-sm">This component preserves its state when detached!</p>
-                  <button className="mt-4 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors">
-                    Click Me
-                  </button>
-                </div>
-              </div>
+              <InteractiveCounter />
             </DetachableContent>
           </div>
         </div>
