@@ -207,6 +207,7 @@ export default function Home() {
               title="YouTube Video"
               headerStyle={{ backgroundColor: "#dc2626", textColor: "#fff", buttonColor: "#fff" }}
               frameStyle={{ borderRadius: 12, borderColor: "#dc2626", borderWidth: 2 }}
+              detachButtonStyle="outside"
             >
               <iframe
                 src="https://www.youtube.com/embed/dQw4w9WgXcQ"

@@ -65,8 +65,10 @@ interface DetachableContentProps {
   headerStyle?: HeaderStyleOptions;
   /** Frame style options for floating mode */
   frameStyle?: FrameStyleOptions;
-  /** Position of detach button */
+  /** Position of detach button when inside (overlay) */
   detachButtonPosition?: "top-right" | "top-left" | "bottom-right" | "bottom-left";
+  /** Button placement: inside (overlay on hover) or outside (below content) */
+  detachButtonStyle?: "inside" | "outside";
   /** Custom class for the container */
   className?: string;
   /** Placeholder style when detached */
@@ -84,10 +86,12 @@ export function DetachableContent({
   headerStyle,
   frameStyle,
   detachButtonPosition = "top-right",
+  detachButtonStyle = "inside",
   className,
   placeholderClassName,
   lockAspectRatio = false,
 }: DetachableContentProps) {
+  void _id; // Suppress unused variable warning
   const [isDetached, setIsDetached] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -279,8 +283,8 @@ export function DetachableContent({
           </div>
         </Rnd>
 
-        {/* Detach button - only visible when inline */}
-        {!isDetached && (
+        {/* Detach button (inside/overlay) - only visible when inline and style is "inside" */}
+        {!isDetached && detachButtonStyle === "inside" && (
           <button
             onClick={handleDetach}
             className={cn(
@@ -296,6 +300,21 @@ export function DetachableContent({
           </button>
         )}
       </div>
+
+      {/* Detach button (outside) - below content */}
+      {!isDetached && detachButtonStyle === "outside" && (
+        <button
+          onClick={handleDetach}
+          className={cn(
+            "flex items-center justify-center gap-2 w-full mt-3 py-2 px-4",
+            "rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm",
+            "transition-colors duration-200"
+          )}
+        >
+          <ExternalLink className="w-4 h-4" />
+          Pop out
+        </button>
+      )}
     </>
   );
 }
