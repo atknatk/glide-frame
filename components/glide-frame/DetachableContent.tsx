@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, ReactNode, useEffect, useMemo } from "react";
+import { useState, useRef, useCallback, ReactNode, useEffect, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { Rnd } from "react-rnd";
 import { ExternalLink, Minimize2 } from "lucide-react";
@@ -12,24 +12,47 @@ import { cn } from "@/lib/utils";
 let globalZIndex = 10000;
 const getNextZIndex = () => ++globalZIndex;
 
-// Global state store for detachable content
+// Global state store for detachable content with sync support
 const detachableStateStore = new Map<string, unknown>();
+const listeners = new Map<string, Set<() => void>>();
+
+function subscribeToStore(id: string, callback: () => void) {
+  if (!listeners.has(id)) listeners.set(id, new Set());
+  listeners.get(id)!.add(callback);
+  return () => listeners.get(id)!.delete(callback);
+}
+
+function getStoreSnapshot<T>(id: string, initialValue: T): T {
+  const stored = detachableStateStore.get(id);
+  return stored !== undefined ? (stored as T) : initialValue;
+}
+
+function setStoreValue<T>(id: string, value: T) {
+  detachableStateStore.set(id, value);
+  listeners.get(id)?.forEach(cb => cb());
+}
 
 export function useDetachableState<T>(id: string, initialValue: T): [T, (value: T | ((prev: T) => T)) => void] {
-  const [value, setValue] = useState<T>(() => {
-    const stored = detachableStateStore.get(id);
-    return stored !== undefined ? (stored as T) : initialValue;
-  });
+  // Initialize store if not exists
+  useEffect(() => {
+    if (!detachableStateStore.has(id)) {
+      detachableStateStore.set(id, initialValue);
+    }
+  }, [id, initialValue]);
 
-  const setValueAndStore = useCallback((newValue: T | ((prev: T) => T)) => {
-    setValue(prev => {
-      const resolved = typeof newValue === 'function' ? (newValue as (prev: T) => T)(prev) : newValue;
-      detachableStateStore.set(id, resolved);
-      return resolved;
-    });
-  }, [id]);
+  const value = useSyncExternalStore(
+    (cb) => subscribeToStore(id, cb),
+    () => getStoreSnapshot(id, initialValue),
+    () => initialValue
+  );
 
-  return [value, setValueAndStore];
+  const setValue = useCallback((newValue: T | ((prev: T) => T)) => {
+    const current = getStoreSnapshot(id, initialValue);
+    const resolved = typeof newValue === 'function' ? (newValue as (prev: T) => T)(current) : newValue;
+    setStoreValue(id, resolved);
+  }, [id, initialValue]);
+
+  return [value, setValue];
 }
 
 interface DetachableContentProps {
