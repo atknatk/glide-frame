@@ -57,29 +57,41 @@ export function useDetachableState<T>(id: string, initialValue: T): [T, (value: 
 
 // ============================================================================
 // Detached Content Provider - keeps floating content alive across navigation
+// Content is ALWAYS rendered in provider, only CSS positioning changes
 // ============================================================================
 
-interface DetachedItem {
+interface RegisteredContent {
   id: string;
   title: string;
   content: ReactNode;
   headerStyle?: HeaderStyleOptions;
   frameStyle?: FrameStyleOptions;
+  lockAspectRatio: boolean;
+  // Slot position (where inline content should appear)
+  slotRect: DOMRect | null;
+  // Floating state
+  isDetached: boolean;
   position: { x: number; y: number };
   size: { width: number; height: number };
   zIndex: number;
   isMaximized: boolean;
   preMaximizeState: { position: { x: number; y: number }; size: { width: number; height: number } } | null;
   aspectRatio: number | false;
-  onAttach: () => void;
 }
 
 interface DetachedContentContextValue {
-  detachedItems: Map<string, DetachedItem>;
-  detachContent: (item: DetachedItem) => void;
+  registerContent: (id: string, content: ReactNode, options: {
+    title: string;
+    headerStyle?: HeaderStyleOptions;
+    frameStyle?: FrameStyleOptions;
+    lockAspectRatio: boolean;
+  }) => void;
+  unregisterContent: (id: string) => void;
+  updateSlotRect: (id: string, rect: DOMRect | null) => void;
+  detachContent: (id: string) => void;
   attachContent: (id: string) => void;
-  updateItem: (id: string, updates: Partial<DetachedItem>) => void;
   isDetached: (id: string) => boolean;
+  getContent: (id: string) => RegisteredContent | undefined;
 }
 
 const DetachedContentContext = createContext<DetachedContentContextValue | null>(null);
@@ -89,30 +101,113 @@ export function useDetachedContent() {
 }
 
 export function DetachedContentProvider({ children }: { children: ReactNode }) {
-  const [detachedItems, setDetachedItems] = useState<Map<string, DetachedItem>>(new Map());
+  const [contents, setContents] = useState<Map<string, RegisteredContent>>(new Map());
 
-  const detachContent = useCallback((item: DetachedItem) => {
-    setDetachedItems(prev => {
+  const registerContent = useCallback((id: string, content: ReactNode, options: {
+    title: string;
+    headerStyle?: HeaderStyleOptions;
+    frameStyle?: FrameStyleOptions;
+    lockAspectRatio: boolean;
+  }) => {
+    setContents(prev => {
+      const existing = prev.get(id);
+      // If already registered and detached, keep the detached state but update content
+      if (existing?.isDetached) {
+        const next = new Map(prev);
+        next.set(id, { ...existing, content, ...options });
+        return next;
+      }
+      // New registration or re-registration when not detached
       const next = new Map(prev);
-      next.set(item.id, item);
+      next.set(id, {
+        id,
+        content,
+        ...options,
+        slotRect: existing?.slotRect || null,
+        isDetached: existing?.isDetached || false,
+        position: existing?.position || { x: 20, y: 80 },
+        size: existing?.size || { width: 480, height: 320 },
+        zIndex: existing?.zIndex || 10000,
+        isMaximized: existing?.isMaximized || false,
+        preMaximizeState: existing?.preMaximizeState || null,
+        aspectRatio: existing?.aspectRatio || false,
+      });
       return next;
     });
   }, []);
 
-  const attachContent = useCallback((id: string) => {
-    setDetachedItems(prev => {
+  const unregisterContent = useCallback((id: string) => {
+    setContents(prev => {
       const item = prev.get(id);
-      if (item) {
-        item.onAttach();
-      }
+      // Don't unregister if detached - keep floating
+      if (item?.isDetached) return prev;
       const next = new Map(prev);
       next.delete(id);
       return next;
     });
   }, []);
 
-  const updateItem = useCallback((id: string, updates: Partial<DetachedItem>) => {
-    setDetachedItems(prev => {
+  const updateSlotRect = useCallback((id: string, rect: DOMRect | null) => {
+    setContents(prev => {
+      const item = prev.get(id);
+      if (!item) return prev;
+      const next = new Map(prev);
+      next.set(id, { ...item, slotRect: rect });
+      return next;
+    });
+  }, []);
+
+  const detachContent = useCallback((id: string) => {
+    setContents(prev => {
+      const item = prev.get(id);
+      if (!item || !item.slotRect) return prev;
+
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const isMobile = viewportWidth < 768;
+      const headerHeight = item.headerStyle?.height || 44;
+
+      const maxWidth = viewportWidth - 40;
+      const maxHeight = viewportHeight - 100;
+
+      const width = isMobile
+        ? Math.min(item.slotRect.width, maxWidth)
+        : Math.min(Math.max(item.slotRect.width, 400), maxWidth);
+      const height = Math.min(item.slotRect.height + headerHeight, maxHeight);
+
+      const next = new Map(prev);
+      next.set(id, {
+        ...item,
+        isDetached: true,
+        position: { x: 20, y: isMobile ? 60 : 80 },
+        size: { width, height },
+        zIndex: getNextZIndex(),
+        aspectRatio: item.lockAspectRatio ? width / height : false,
+      });
+      return next;
+    });
+  }, []);
+
+  const attachContent = useCallback((id: string) => {
+    setContents(prev => {
+      const item = prev.get(id);
+      if (!item) return prev;
+      const next = new Map(prev);
+      next.set(id, { ...item, isDetached: false, isMaximized: false });
+      return next;
+    });
+  }, []);
+
+  const isDetached = useCallback((id: string) => {
+    return contents.get(id)?.isDetached ?? false;
+  }, [contents]);
+
+  const getContent = useCallback((id: string) => {
+    return contents.get(id);
+  }, [contents]);
+
+  const updateContent = useCallback((id: string, updates: Partial<RegisteredContent>) => {
+    setContents(prev => {
       const item = prev.get(id);
       if (!item) return prev;
       const next = new Map(prev);
@@ -121,39 +216,48 @@ export function DetachedContentProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const isDetached = useCallback((id: string) => {
-    return detachedItems.has(id);
-  }, [detachedItems]);
-
   return (
-    <DetachedContentContext.Provider value={{ detachedItems, detachContent, attachContent, updateItem, isDetached }}>
+    <DetachedContentContext.Provider value={{
+      registerContent,
+      unregisterContent,
+      updateSlotRect,
+      detachContent,
+      attachContent,
+      isDetached,
+      getContent
+    }}>
       {children}
-      <DetachedContentRenderer />
+      <ContentRenderer contents={contents} updateContent={updateContent} attachContent={attachContent} />
     </DetachedContentContext.Provider>
   );
 }
 
-// Renders all detached floating windows via portal
-function DetachedContentRenderer() {
-  const context = useDetachedContent();
+// Renders all content via portal - both inline and floating
+function ContentRenderer({
+  contents,
+  updateContent,
+  attachContent,
+}: {
+  contents: Map<string, RegisteredContent>;
+  updateContent: (id: string, updates: Partial<RegisteredContent>) => void;
+  attachContent: (id: string) => void;
+}) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
   }, []);
 
-  if (!context || !mounted) return null;
-
-  const { detachedItems, attachContent, updateItem } = context;
+  if (!mounted) return null;
 
   return createPortal(
     <>
-      {Array.from(detachedItems.values()).map((item) => (
-        <FloatingWindow
+      {Array.from(contents.values()).map((item) => (
+        <ContentItem
           key={item.id}
           item={item}
-          onAttach={() => attachContent(item.id)}
-          onUpdate={(updates) => updateItem(item.id, updates)}
+          updateContent={updateContent}
+          attachContent={attachContent}
         />
       ))}
     </>,
@@ -161,49 +265,76 @@ function DetachedContentRenderer() {
   );
 }
 
-// Floating window component for detached content
-function FloatingWindow({
+// Single content item - renders either inline (positioned over slot) or floating
+function ContentItem({
   item,
-  onAttach,
-  onUpdate,
+  updateContent,
+  attachContent,
 }: {
-  item: DetachedItem;
-  onAttach: () => void;
-  onUpdate: (updates: Partial<DetachedItem>) => void;
+  item: RegisteredContent;
+  updateContent: (id: string, updates: Partial<RegisteredContent>) => void;
+  attachContent: (id: string) => void;
 }) {
   const bringToFront = useCallback(() => {
-    onUpdate({ zIndex: getNextZIndex() });
-  }, [onUpdate]);
+    updateContent(item.id, { zIndex: getNextZIndex() });
+  }, [item.id, updateContent]);
 
   const handleMaximize = useCallback(() => {
     if (!item.isMaximized) {
-      onUpdate({
+      updateContent(item.id, {
         preMaximizeState: { position: item.position, size: item.size },
         position: { x: 0, y: 0 },
         size: { width: window.innerWidth, height: window.innerHeight },
         isMaximized: true,
       });
     }
-  }, [item, onUpdate]);
+  }, [item, updateContent]);
 
   const handleRestore = useCallback(() => {
     if (item.isMaximized && item.preMaximizeState) {
-      onUpdate({
+      updateContent(item.id, {
         position: item.preMaximizeState.position,
         size: item.preMaximizeState.size,
         isMaximized: false,
       });
     }
-  }, [item, onUpdate]);
+  }, [item, updateContent]);
+
+  const handleAttach = useCallback(() => {
+    attachContent(item.id);
+  }, [item.id, attachContent]);
 
   const frameStyles = {
     backgroundColor: item.frameStyle?.backgroundColor,
     borderColor: item.frameStyle?.borderColor,
     borderWidth: item.frameStyle?.borderWidth,
     borderRadius: item.frameStyle?.borderRadius,
-    boxShadow: item.frameStyle?.boxShadow || "0 25px 50px -12px rgba(0, 0, 0, 0.5)",
+    boxShadow: item.isDetached ? (item.frameStyle?.boxShadow || "0 25px 50px -12px rgba(0, 0, 0, 0.5)") : undefined,
   };
 
+  // If no slot rect and not detached, don't render
+  if (!item.slotRect && !item.isDetached) return null;
+
+  // INLINE MODE: Position over the slot
+  if (!item.isDetached && item.slotRect) {
+    return (
+      <div
+        style={{
+          position: 'fixed',
+          top: item.slotRect.top,
+          left: item.slotRect.left,
+          width: item.slotRect.width,
+          height: item.slotRect.height,
+          zIndex: 1, // Low z-index for inline
+          pointerEvents: 'auto',
+        }}
+      >
+        {item.content}
+      </div>
+    );
+  }
+
+  // FLOATING MODE: Use Rnd for drag/resize
   return (
     <div
       style={{
@@ -222,12 +353,12 @@ function FloatingWindow({
         lockAspectRatio={item.aspectRatio}
         onDragStart={bringToFront}
         onDragStop={(_, d) => {
-          if (!item.isMaximized) onUpdate({ position: { x: d.x, y: d.y } });
+          if (!item.isMaximized) updateContent(item.id, { position: { x: d.x, y: d.y } });
         }}
         onResizeStart={bringToFront}
         onResizeStop={(_, __, ref, ___, pos) => {
           if (!item.isMaximized) {
-            onUpdate({
+            updateContent(item.id, {
               size: { width: ref.offsetWidth, height: ref.offsetHeight },
               position: pos,
             });
@@ -261,8 +392,8 @@ function FloatingWindow({
               isDocked={false}
               isMaximized={item.isMaximized}
               onMaximize={handleMaximize}
-              onRestore={item.isMaximized ? handleRestore : onAttach}
-              onClose={onAttach}
+              onRestore={item.isMaximized ? handleRestore : handleAttach}
+              onClose={handleAttach}
               styleOptions={item.headerStyle}
             />
           </div>
@@ -298,8 +429,6 @@ interface DetachableContentProps {
   lockAspectRatio?: boolean;
 }
 
-const DEFAULT_HEADER_HEIGHT = 44;
-
 export function DetachableContent({
   id,
   title,
@@ -313,13 +442,11 @@ export function DetachableContent({
   lockAspectRatio = false,
 }: DetachableContentProps) {
   const context = useDetachedContent();
-  const contentRef = useRef<HTMLDivElement>(null);
-  const [originalRect, setOriginalRect] = useState<DOMRect | null>(null);
+  const slotRef = useRef<HTMLDivElement>(null);
 
   // Check if this content is detached (managed by provider)
   const isDetachedInProvider = context?.isDetached(id) ?? false;
-
-  const headerHeight = headerStyle?.height || DEFAULT_HEADER_HEIGHT;
+  const registeredContent = context?.getContent(id);
 
   const buttonPositionClasses = {
     "top-right": "top-2 right-2",
@@ -328,42 +455,43 @@ export function DetachableContent({
     "bottom-left": "bottom-2 left-2",
   };
 
+  // Register content with provider on mount
+  useEffect(() => {
+    if (!context) return;
+    context.registerContent(id, children, { title, headerStyle, frameStyle, lockAspectRatio });
+    return () => context.unregisterContent(id);
+  }, [context, id, children, title, headerStyle, frameStyle, lockAspectRatio]);
+
+  // Update slot rect when slot element changes or on scroll/resize
+  useEffect(() => {
+    if (!context || !slotRef.current) return;
+
+    const updateRect = () => {
+      if (slotRef.current) {
+        context.updateSlotRect(id, slotRef.current.getBoundingClientRect());
+      }
+    };
+
+    updateRect();
+
+    // Update on scroll and resize
+    window.addEventListener('scroll', updateRect, true);
+    window.addEventListener('resize', updateRect);
+
+    // Also use ResizeObserver for layout changes
+    const resizeObserver = new ResizeObserver(updateRect);
+    resizeObserver.observe(slotRef.current);
+
+    return () => {
+      window.removeEventListener('scroll', updateRect, true);
+      window.removeEventListener('resize', updateRect);
+      resizeObserver.disconnect();
+    };
+  }, [context, id, isDetachedInProvider]);
+
   const handleDetach = useCallback(() => {
-    if (!context || !contentRef.current) return;
-
-    const rect = contentRef.current.getBoundingClientRect();
-    setOriginalRect(rect);
-
-    // Responsive sizing - fit within viewport
-    const viewportWidth = window.innerWidth;
-    const viewportHeight = window.innerHeight;
-    const isMobile = viewportWidth < 768;
-
-    const maxWidth = viewportWidth - 40;
-    const maxHeight = viewportHeight - 100;
-
-    const width = isMobile
-      ? Math.min(rect.width, maxWidth)
-      : Math.min(Math.max(rect.width, 400), maxWidth);
-    const height = Math.min(rect.height + headerHeight, maxHeight);
-
-    const calculatedAspectRatio = lockAspectRatio ? width / height : false;
-
-    context.detachContent({
-      id,
-      title,
-      content: children,
-      headerStyle,
-      frameStyle,
-      position: { x: 20, y: isMobile ? 60 : 80 },
-      size: { width, height },
-      zIndex: getNextZIndex(),
-      isMaximized: false,
-      preMaximizeState: null,
-      aspectRatio: calculatedAspectRatio,
-      onAttach: () => setOriginalRect(null),
-    });
-  }, [context, id, title, children, headerStyle, frameStyle, headerHeight, lockAspectRatio]);
+    context?.detachContent(id);
+  }, [context, id]);
 
   const handleAttach = useCallback(() => {
     context?.attachContent(id);
@@ -372,7 +500,7 @@ export function DetachableContent({
   // If not using provider, show warning
   if (!context) {
     return (
-      <div className={cn("relative group", className)} ref={contentRef}>
+      <div className={cn("relative group", className)}>
         {children}
         <div className="absolute inset-0 flex items-center justify-center bg-black/50 text-white text-sm">
           Wrap with DetachedContentProvider
@@ -384,9 +512,9 @@ export function DetachableContent({
   return (
     <>
       {/* Placeholder when detached - reserves space in document flow */}
-      {isDetachedInProvider && originalRect && (
+      {isDetachedInProvider && registeredContent?.slotRect && (
         <div
-          style={{ width: originalRect.width, height: originalRect.height }}
+          style={{ width: registeredContent.slotRect.width, height: registeredContent.slotRect.height }}
           className={cn(
             "rounded-lg border-2 border-dashed border-slate-600",
             "bg-slate-800/30 flex items-center justify-center",
@@ -403,11 +531,13 @@ export function DetachableContent({
         </div>
       )}
 
-      {/* Inline content - only shown when not detached */}
+      {/* Slot - invisible element that marks where inline content should appear */}
+      {/* Content is rendered via portal but positioned over this slot */}
       {!isDetachedInProvider && (
         <>
-          <div ref={contentRef} className={cn("relative group", className)}>
-            {children}
+          <div ref={slotRef} className={cn("relative group", className)}>
+            {/* Invisible placeholder to maintain size - actual content rendered via portal */}
+            <div className="invisible">{children}</div>
 
             {/* Detach button (inside/overlay) */}
             {detachButtonStyle === "inside" && (
