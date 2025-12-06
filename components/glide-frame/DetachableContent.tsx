@@ -57,9 +57,23 @@ export function DetachableContent({
     if (contentRef.current) {
       const rect = contentRef.current.getBoundingClientRect();
       setOriginalRect(rect);
-      // Position at top-left with some padding, not at the original element position
-      setPosition({ x: 20, y: 80 });
-      setSize({ width: Math.max(rect.width, 400), height: rect.height + headerHeight });
+
+      // Responsive sizing - fit within viewport
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const isMobile = viewportWidth < 768;
+
+      const maxWidth = viewportWidth - 40; // 20px padding on each side
+      const maxHeight = viewportHeight - 100; // Leave space for navigation
+
+      const width = isMobile
+        ? Math.min(rect.width, maxWidth)
+        : Math.min(Math.max(rect.width, 400), maxWidth);
+      const height = Math.min(rect.height + headerHeight, maxHeight);
+
+      // Position at top-left with padding
+      setPosition({ x: 20, y: isMobile ? 60 : 80 });
+      setSize({ width, height });
     }
     setIsDetached(true);
   }, [headerHeight]);
@@ -161,8 +175,8 @@ export function DetachableContent({
             setPosition(pos);
           }
         }}
-        minWidth={280}
-        minHeight={200}
+        minWidth={Math.min(280, typeof window !== "undefined" ? window.innerWidth - 40 : 280)}
+        minHeight={180}
         bounds="window"
         dragHandleClassName="detachable-frame-handle"
         cancel=".glide-frame-button"
