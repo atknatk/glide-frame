@@ -42,6 +42,8 @@ function useIsMobile() {
   );
 }
 
+const DEFAULT_HEADER_HEIGHT = 44;
+
 export function GlideFrame({
   id,
   title,
@@ -54,6 +56,8 @@ export function GlideFrame({
   minSize,
   maxSize,
   persist = true,
+  headerStyle,
+  frameStyle,
 }: GlideFrameProps) {
   const [isClosing, setIsClosing] = useState(false);
   const [isMomentumActive, setIsMomentumActive] = useState(false);
@@ -291,6 +295,7 @@ export function GlideFrame({
       maxHeight={currentMaxSize.height}
       bounds="window"
       dragHandleClassName="glide-frame-handle"
+      cancel=".glide-frame-button"
       disableDragging={!computed.canDrag}
       enableResizing={computed.canResize ? {
         top: true,
@@ -329,16 +334,24 @@ export function GlideFrame({
         // Enable hardware acceleration
         transform: "translateZ(0)",
         willChange: isMomentumActive ? "transform, left, top" : "transform",
+        // Frame style overrides
+        backgroundColor: frameStyle?.backgroundColor,
+        borderColor: frameStyle?.borderColor,
+        borderWidth: frameStyle?.borderWidth,
+        borderRadius: frameStyle?.borderRadius,
+        boxShadow: frameStyle?.boxShadow,
+        ...frameStyle?.style,
       }}
       className={cn(
         "fixed",
-        "rounded-lg overflow-hidden",
-        "shadow-2xl shadow-black/20",
-        "border border-border/50",
-        "bg-background/95 backdrop-blur-xl",
-        "dark:bg-background/90",
+        "overflow-hidden",
+        !frameStyle?.borderRadius && "rounded-lg",
+        !frameStyle?.boxShadow && "shadow-2xl shadow-black/20",
+        !frameStyle?.borderColor && "border border-border/50",
+        !frameStyle?.backgroundColor && "bg-background/95 backdrop-blur-xl dark:bg-background/90",
         // Touch-friendly on mobile
         isMobile && "touch-manipulation",
+        frameStyle?.className,
         className
       )}
     >
@@ -348,16 +361,18 @@ export function GlideFrame({
           title={title}
           isDocked={state.isDocked}
           isMaximized={state.isMaximized}
-          onDockLeft={actions.dockLeft}
-          onDockRight={actions.dockRight}
           onMaximize={actions.maximize}
           onRestore={actions.restore}
           onClose={handleClose}
+          styleOptions={headerStyle}
         />
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto h-[calc(100%-44px)]">
+      <div
+        className="flex-1 overflow-auto"
+        style={{ height: `calc(100% - ${headerStyle?.height || DEFAULT_HEADER_HEIGHT}px)` }}
+      >
         {children}
       </div>
     </Rnd>
